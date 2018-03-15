@@ -79,8 +79,9 @@ class GameEstimatorEvaluationFunction(
       // We assume the model selection evaluator is in head position
       evaluations.head._2
 
-    case _ => throw new IllegalArgumentException(
-      s"Can't extract evaluation value from a GAME result with no evaluations: $gameResult")
+    case _ =>
+      throw new IllegalArgumentException(
+        s"Can't extract evaluation value from a GAME result with no evaluations: $gameResult")
   }
 
   /**

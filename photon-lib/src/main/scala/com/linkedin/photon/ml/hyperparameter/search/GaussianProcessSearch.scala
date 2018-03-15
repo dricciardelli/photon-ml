@@ -14,11 +14,7 @@
  */
 package com.linkedin.photon.ml.hyperparameter.search
 
-import math.max
-
 import breeze.linalg.{DenseMatrix, DenseVector}
-import breeze.numerics.sqrt
-import breeze.stats.variance
 
 import com.linkedin.photon.ml.evaluation.Evaluator
 import com.linkedin.photon.ml.hyperparameter.EvaluationFunction

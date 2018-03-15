@@ -28,8 +28,8 @@ import com.linkedin.photon.ml.hyperparameter.estimators.PredictionTransformation
  * @see "Practical Bayesian Optimization of Machine Learning Algorithms" (PBO),
  *   https://papers.nips.cc/paper/4522-practical-bayesian-optimization-of-machine-learning-algorithms.pdf
  *
- * @param evaluator the evaluator
- * @param bestEvaluation the current best evaluation
+ * @param evaluator The evaluator
+ * @param bestEvaluation The current best evaluation
  */
 class ExpectedImprovement(evaluator: Evaluator, bestEvaluation: Double) extends PredictionTransformation {
 
@@ -49,6 +49,6 @@ class ExpectedImprovement(evaluator: Evaluator, bestEvaluation: Double) extends 
     val gamma = (predictiveMeans - bestEvaluation) / std * direction
 
     // Eq. 2
-    std :* (gamma :* gamma.map(standardNormal.cdf(_)) + gamma.map(standardNormal.pdf(_)))
+    std :* (gamma :* gamma.map(standardNormal.cdf) + gamma.map(standardNormal.pdf))
   }
 }
