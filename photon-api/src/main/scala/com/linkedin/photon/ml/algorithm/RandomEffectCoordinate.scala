@@ -18,6 +18,7 @@ import scala.collection.Set
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.SparkSession
 
 import com.linkedin.photon.ml.Types.REId
 import com.linkedin.photon.ml.constants.StorageLevel
@@ -91,6 +92,11 @@ protected[ml] abstract class RandomEffectCoordinate[Objective <: SingleNodeObjec
 }
 
 object RandomEffectCoordinate {
+
+  private lazy val spark = SparkSession.builder().getOrCreate()
+
+  val DEFAULT_MEDIAN_ERROR = 0.05
+
   /**
    * Update the model (i.e. run the coordinate optimizer).
    *
@@ -103,22 +109,71 @@ object RandomEffectCoordinate {
   protected[algorithm] def updateModel[Function <: SingleNodeObjectiveFunction](
       randomEffectDataSet: RandomEffectDataSet,
       randomEffectOptimizationProblem: RandomEffectOptimizationProblem[Function],
-      randomEffectModel: RandomEffectModel): (RandomEffectModel, Option[RandomEffectOptimizationTracker]) = {
+      randomEffectModel: RandomEffectModel,
+      isTuningHyperParameters: Boolean = false): (RandomEffectModel, Option[RandomEffectOptimizationTracker]) = {
 
-    val updatedModelsAndTrackers = randomEffectDataSet
+    val rawDataModelAndProblem = randomEffectDataSet
       .activeData
       .join(randomEffectOptimizationProblem.optimizationProblems)
       .join(randomEffectModel.modelsRDD)
-      .mapValues {
-        case (((localDataSet, optimizationProblem), localModel)) =>
+
+    val updatedModelsAndTrackers = if (isTuningHyperParameters) {
+
+      // Necessary for converting RDD to Dataset
+      import spark.implicits._
+
+      // Run hyper-parameter tuning for each random effect entity
+      val tunedHyperParameters = rawDataModelAndProblem
+        .mapValues { case ((localDataSet, optimizationProblem), localModel) =>
+          optimizationProblem.runHyperParameterTuning(localDataSet.dataPoints.map(_._2), localModel)
+        }
+        .persist(StorageLevel.VERY_FREQUENT_REUSE_RDD_STORAGE_LEVEL)
+
+      // Compute the median auto-tuned hyper-parameter
+      val medianRegWeight = spark
+        .createDataset(tunedHyperParameters.flatMap(_._2))
+        .stat
+        .approxQuantile("value", Array(0.5), DEFAULT_MEDIAN_ERROR)
+        .head
+
+      // Train the random effect models with auto-tuned hyper-parameters for entities that have enough data, and the
+      // default hyper-parameter otherwise
+      val result = tunedHyperParameters
+        .mapValues {
+          case Some(regWeight) => regWeight
+          case None => medianRegWeight
+        }
+        .join(rawDataModelAndProblem)
+        .mapValues { case (regWeight, ((localDataSet, optimizationProblem), localModel)) =>
+
+          optimizationProblem.updateRegularizationWeight(regWeight)
+
           val trainingLabeledPoints = localDataSet.dataPoints.map(_._2)
           val updatedModel = optimizationProblem.run(trainingLabeledPoints, localModel)
           val stateTrackers = optimizationProblem.getStatesTracker
 
           (updatedModel, stateTrackers)
-      }
-      .setName(s"Updated models and state trackers for random effect ${randomEffectDataSet.randomEffectType}")
-      .persist(StorageLevel.VERY_FREQUENT_REUSE_RDD_STORAGE_LEVEL)
+        }
+        .setName(s"Updated models and state trackers for random effect ${randomEffectDataSet.randomEffectType}")
+        .persist(StorageLevel.VERY_FREQUENT_REUSE_RDD_STORAGE_LEVEL)
+
+      tunedHyperParameters.unpersist()
+
+      result
+
+    } else {
+      rawDataModelAndProblem
+        .mapValues { case ((localDataSet, optimizationProblem), localModel) =>
+          val trainingLabeledPoints = localDataSet.dataPoints.map(_._2)
+          val updatedModel = optimizationProblem.run(trainingLabeledPoints, localModel)
+          val stateTrackers = optimizationProblem.getStatesTracker
+
+          (updatedModel, stateTrackers)
+        }
+        .setName(s"Updated models and state trackers for random effect ${randomEffectDataSet.randomEffectType}")
+        .persist(StorageLevel.VERY_FREQUENT_REUSE_RDD_STORAGE_LEVEL)
+    }
+
     val updatedRandomEffectModel = randomEffectModel
       .update(updatedModelsAndTrackers.mapValues(_._1))
       .setName(s"Updated models for random effect ${randomEffectDataSet.randomEffectType}")
@@ -208,8 +263,8 @@ object RandomEffectCoordinate {
       }
       .collectAsMap()
 
-    //TODO: Need a better design that properly unpersists the broadcasted variables and persists the computed RDD
-    val modelsForPassiveDataBroadcast = passiveData.sparkContext.broadcast(modelsForPassiveData)
+    //TODO: Need a better design that properly unpersists the broadcast variables and persists the computed RDD
+    val modelsForPassiveDataBroadcast = spark.sparkContext.broadcast(modelsForPassiveData)
     val passiveScores = passiveData.mapValues { case (randomEffectId, labeledPoint) =>
       modelsForPassiveDataBroadcast.value(randomEffectId).computeScore(labeledPoint.features)
     }

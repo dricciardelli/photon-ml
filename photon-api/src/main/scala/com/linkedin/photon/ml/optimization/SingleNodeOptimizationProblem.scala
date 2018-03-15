@@ -51,10 +51,63 @@ protected[ml] class SingleNodeOptimizationProblem[Objective <: SingleNodeObjecti
     optimizer,
     objectiveFunction,
     glmConstructor,
+    regularizationContext,
     isComputingVariances)
   with Serializable {
 
   import SingleNodeOptimizationProblem._
+
+  /**
+   * Runs hyper-parameter optimization to find the best regularization weight.
+   *
+   * @param input The training data
+   * @param initialModel The initial model from which to begin optimization
+   * @param range The range of regularization weights to explore
+   * @param iterations The number of hyper-parameter tuning iterations to perform
+   * @return The best regularization weight for the training data and settings (if one was found)
+   */
+  def runHyperParameterTuning(
+      input: Iterable[LabeledPoint],
+      initialModel: GeneralizedLinearModel,
+      range: DoubleRange = DEFAULT_HYPER_PARAMETER_RANGE,
+      iterations: Int = DEFAULT_TUNING_ITERATIONS): Option[Double] =
+
+    if (input.size < DEFAULT_SAMPLES_LOWER_BOUND) {
+      None
+    } else {
+      // Setup evaluation function
+      val evaluationFunction = SingleNodeEvaluationFunction(
+        optimizer,
+        objectiveFunction,
+        regularizationContext,
+        initialModel,
+        input)
+
+      // Setup search algorithm
+      val searcher = new RandomSearch[(Double, Double)](
+        List(DoubleRange(log(range.start), log(range.end))),
+        evaluationFunction,
+        seed = seed)
+
+      // This is hanging, for some reason. Each model train / test cycle happens really fast for these sub-problems,
+      // though, so it might not be necessary since we can do a lot of evaluations
+      // val searcher = new GaussianProcessSearch[(GeneralizedLinearModel, Double, Double)](
+      //   List(range),
+      //   evaluationFunction,
+      //   evaluator,
+      //   seed = seed)
+
+      // Run hyper-parameter search
+      val results = searcher.find(iterations)
+
+      // Return best hyper-parameter
+      val (bestWeight, bestEval) = results.minBy(_._2)
+      if (!bestEval.isNaN && !bestEval.isInfinite) {
+        Some(bestWeight)
+      } else {
+        None
+      }
+    }
 
   /**
    * Compute coefficient variances
@@ -85,57 +138,6 @@ protected[ml] class SingleNodeOptimizationProblem[Objective <: SingleNodeObjecti
     run(input, initializeZeroModel(input.head.features.size))
 
   /**
-   * Runs hyper-parameter optimization to find the best regularization weight.
-   *
-   * @param input The training data
-   * @param initialModel The initial model from which to begin optimization
-   * @param objectiveFunction The objective function
-   * @param range The range of regularization weights to explore
-   * @param iterations The number of hyper-parameter tuning iterations to perform
-   * @return The best regularization weight for the training data and settings (if one was found)
-   */
-  private def runHyperParameterTuning(
-      input: Iterable[LabeledPoint],
-      initialModel: GeneralizedLinearModel,
-      objectiveFunction: Objective,
-      range: DoubleRange,
-      iterations: Int): Option[Double] = {
-
-    // Setup evaluation function
-    val evaluationFunction = SingleNodeEvaluationFunction(
-      optimizer,
-      objectiveFunction,
-      regularizationContext,
-      initialModel,
-      input)
-
-    // Setup search algorithm
-    val searcher = new RandomSearch[(Double, Double)](
-      List(DoubleRange(log(range.start), log(range.end))),
-      evaluationFunction,
-      seed = seed)
-
-    // This is hanging, for some reason. Each model train / test cycle happens really fast for these sub-problems,
-    // though, so it might not be necessary since we can do a lot of evaluations
-    // val searcher = new GaussianProcessSearch[(GeneralizedLinearModel, Double, Double)](
-    //   List(range),
-    //   evaluationFunction,
-    //   evaluator,
-    //   seed = seed)
-
-    // Run hyper-parameter search
-    val results = searcher.find(iterations)
-
-    // Return best hyper-parameter
-    val (bestWeight, bestEval) = results.minBy(_._2)
-    if (!bestEval.isNaN && !bestEval.isInfinite) {
-      Some(bestWeight)
-    } else {
-      None
-    }
-  }
-
-  /**
    * Run the optimization algorithm on the input data, starting from the initial model provided.
    *
    * @param input The training data
@@ -143,29 +145,6 @@ protected[ml] class SingleNodeOptimizationProblem[Objective <: SingleNodeObjecti
    * @return The learned GLM for the given optimization problem, data, regularization type, and regularization weight
    */
   override def run(input: Iterable[LabeledPoint], initialModel: GeneralizedLinearModel): GeneralizedLinearModel = {
-
-    // Disabled for now
-    if (false && input.size >= DEFAULT_SAMPLES_LOWER_BOUND) {
-      val optimalRegWeight = runHyperParameterTuning(
-        input,
-        initialModel,
-        objectiveFunction,
-        DEFAULT_HYPER_PARAMETER_RANGE,
-        DEFAULT_TUNING_ITERATIONS)
-
-      objectiveFunction match {
-        case func: L2Regularization =>
-          optimalRegWeight.foreach { weight =>
-            func.l2RegularizationWeight = regularizationContext.getL2RegularizationWeight(weight)
-          }
-      }
-      optimizer match {
-        case owlqn: OWLQN =>
-          optimalRegWeight.foreach { weight =>
-            owlqn.l1RegularizationWeight = regularizationContext.getL2RegularizationWeight(weight)
-          }
-      }
-    }
 
     val normalizationContext = optimizer.getNormalizationContext
     val (optimizedCoefficients, _) = optimizer.optimize(objectiveFunction, initialModel.coefficients.means)(input)

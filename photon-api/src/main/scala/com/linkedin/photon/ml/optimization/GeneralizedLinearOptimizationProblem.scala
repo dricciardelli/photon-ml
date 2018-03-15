@@ -38,6 +38,7 @@ protected[ml] abstract class GeneralizedLinearOptimizationProblem[Objective <: O
     optimizer: Optimizer[Objective],
     objectiveFunction: Objective,
     glmConstructor: Coefficients => GeneralizedLinearModel,
+    regularizationContext: RegularizationContext,
     isComputingVariances: Boolean) extends Logging {
 
   protected val modelTrackerBuilder: Option[mutable.ListBuffer[ModelTracker]] =
@@ -56,6 +57,26 @@ protected[ml] abstract class GeneralizedLinearOptimizationProblem[Objective <: O
    * @return Some(List[ModelTrackers]) if optimization states were tracked, otherwise None
    */
   def getModelTracker: Option[List[ModelTracker]] = modelTrackerBuilder.map(_.toList)
+
+  /**
+   * Update the regularization weight for the optimization problem
+   *
+   * @param regularizationWeight The new regularization weight
+   */
+  def updateRegularizationWeight(regularizationWeight: Double): Unit = {
+
+    optimizer match {
+      case owlqn: OWLQN =>
+        owlqn.l1RegularizationWeight = regularizationContext.getL1RegularizationWeight(regularizationWeight)
+      case _ =>
+    }
+
+    objectiveFunction match {
+      case l2RegFunc: L2Regularization =>
+        l2RegFunc.l2RegularizationWeight = regularizationContext.getL2RegularizationWeight(regularizationWeight)
+      case _ =>
+    }
+  }
 
   /**
    * Create a default generalized linear model with 0-valued coefficients

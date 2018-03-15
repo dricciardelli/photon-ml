@@ -209,6 +209,7 @@ object GeneralizedLinearOptimizationProblemTest {
       optimizer,
       objectiveFunction,
       glmConstructor,
+      regularizationContext,
       false) {
 
     private val mockGLM = mock(classOf[GeneralizedLinearModel])
@@ -218,17 +219,19 @@ object GeneralizedLinearOptimizationProblemTest {
     //
 
     /**
+     * Create a default generalized linear model with 0-valued coefficients
      *
-     * @param dimension
-     * @return
+     * @param dimension The dimensionality of the model coefficients
+     * @return A model with zero coefficients
      */
     def publicInitializeZeroModel(dimension: Int): GeneralizedLinearModel = initializeZeroModel(dimension)
 
     /**
+     * Create a GLM from given coefficients (potentially including intercept)
      *
-     * @param coefficients
-     * @param variances
-     * @return
+     * @param coefficients The feature coefficients means
+     * @param variances The feature coefficient variances
+     * @return A GLM with the provided feature coefficients
      */
     def publicCreateModel(coefficients: Vector[Double], variances: Option[Vector[Double]]): GeneralizedLinearModel =
       createModel(coefficients, variances)
@@ -238,6 +241,7 @@ object GeneralizedLinearOptimizationProblemTest {
     //
 
     /**
+     * Compute coefficient variances
      *
      * @param input The training data
      * @param coefficients The feature coefficients means
@@ -247,6 +251,7 @@ object GeneralizedLinearOptimizationProblemTest {
       None
 
     /**
+     * Run the optimization algorithm on the input data, starting from an initial model of all-0 coefficients.
      *
      * @param input The training data
      * @return The learned GLM for the given optimization problem, data, regularization type, and regularization weight
@@ -254,6 +259,7 @@ object GeneralizedLinearOptimizationProblemTest {
     override def run(input: Iterable[LabeledPoint]): GeneralizedLinearModel = mockGLM
 
     /**
+     * Run the optimization algorithm on the input data, starting from the initial model provided.
      *
      * @param input The training data
      * @param initialModel The initial model from which to begin optimization

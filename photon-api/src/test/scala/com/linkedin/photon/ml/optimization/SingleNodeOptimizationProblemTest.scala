@@ -40,6 +40,7 @@ class SingleNodeOptimizationProblemTest {
   def testComputeVariancesDisabled(): Unit = {
     val optimizer = mock(classOf[Optimizer[SingleNodeGLMLossFunction]])
     val objectiveFunction = mock(classOf[SingleNodeGLMLossFunction])
+    val regularizationContext = mock(classOf[RegularizationContext])
     val statesTracker = mock(classOf[OptimizationStatesTracker])
 
     doReturn(Some(statesTracker)).when(optimizer).getStateTracker
@@ -48,6 +49,7 @@ class SingleNodeOptimizationProblemTest {
       optimizer,
       objectiveFunction,
       LogisticRegressionModel.apply,
+      regularizationContext,
       isComputingVariances = false)
     val trainingData = mock(classOf[Iterable[LabeledPoint]])
     val coefficients = mock(classOf[Vector[Double]])
@@ -62,6 +64,7 @@ class SingleNodeOptimizationProblemTest {
     val optimizer = mock(classOf[Optimizer[SingleNodeGLMLossFunction]])
     val statesTracker = mock(classOf[OptimizationStatesTracker])
     val objectiveFunction = mock(classOf[SingleNodeGLMLossFunction])
+    val regularizationContext = mock(classOf[RegularizationContext])
     val initialModel = mock(classOf[GeneralizedLinearModel])
     val normalizationContext = mock(classOf[NormalizationContext])
     val normalizationContextBroadcast = mock(classOf[BroadcastWrapper[NormalizationContext]])
@@ -74,6 +77,7 @@ class SingleNodeOptimizationProblemTest {
       optimizer,
       objectiveFunction,
       LogisticRegressionModel.apply,
+      regularizationContext,
       isComputingVariances = false)
 
     doReturn(normalizationContextBroadcast).when(optimizer).getNormalizationContext
