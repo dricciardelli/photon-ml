@@ -28,8 +28,7 @@ abstract class DataReader(
     protected val defaultFeatureColumn: String = InputColumnsNames.FEATURES_DEFAULT.toString,
     protected val defaultIntercept: Boolean = true) {
 
-  type InputColumnName = String
-  type MergedColumnName = String
+  import DataReader._
 
   /**
    * This map defines the "feature bags" or "feature shards".
@@ -326,4 +325,10 @@ abstract class DataReader(
       indexMapLoaders: Map[MergedColumnName, IndexMapLoader],
       featureColumnConfigsMap: Map[MergedColumnName, FeatureShardConfiguration],
       numPartitions: Int): DataFrame
+}
+
+object DataReader {
+
+  type InputColumnName = String
+  type MergedColumnName = String
 }

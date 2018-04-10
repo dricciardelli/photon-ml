@@ -59,6 +59,39 @@ object Utils {
     name + delimiter + term
 
   /**
+   * Get the feature key as a concatenation of bag, name, and term delimited by
+   * [[com.linkedin.photon.ml.Constants.DELIMITER]].
+   *
+   * @param bag Feature bag
+   * @param name Feature name
+   * @param term Feature term
+   * @return Feature key
+   */
+  def getFeatureKey(
+      name: CharSequence,
+      term: CharSequence,
+      bag: CharSequence,
+      delimiter: String = Constants.DELIMITER): String =
+    bag + delimiter + name + delimiter + term
+
+  /**
+   * Get the feature bag (if it exists) from the feature key, expected to be formed using the [[getFeatureKey]] method.
+   *
+   * @param key Feature key
+   * @param delimiter Delimiter used to form the key. Default value is [[Constants.DELIMITER]]
+   * @return The feature bag
+   */
+  def getFeatureBagFromKey(key: String, delimiter: String = Constants.DELIMITER): String = {
+
+    val splitArray = key.split(delimiter)
+
+    splitArray.length match {
+      case 3 => splitArray(0)
+      case _ => throw new IllegalArgumentException(s"Provided input [$key] does not contain a feature bag")
+    }
+  }
+
+  /**
    * Get the feature name from the feature key, expected to be formed using one of the [[getFeatureKey()]] methods.
    *
    * @param key Feature key
@@ -66,8 +99,14 @@ object Utils {
    * @return The feature name
    */
   def getFeatureNameFromKey(key: String, delimiter: String = Constants.DELIMITER): String = {
-    require(delimiter.r.findAllIn(key).length == 1, s"Provided input [$key] is not a valid feature key")
-    key.split(delimiter).headOption.getOrElse("")
+
+    val splitArray = key.split(delimiter)
+
+    splitArray.length match {
+      case 2 => splitArray(0)
+      case 3 => splitArray(1)
+      case _ => throw new IllegalArgumentException(s"Provided input [$key] is not a valid feature key")
+    }
   }
 
   /**
@@ -78,8 +117,14 @@ object Utils {
    * @return The feature term
    */
   def getFeatureTermFromKey(key: String, delimiter: String = Constants.DELIMITER): String = {
-    require(delimiter.r.findAllIn(key).length == 1, s"Provided input [$key] is not a valid feature key")
-    key.split(delimiter).lift(1).getOrElse("")
+
+    val splitArray = key.split(delimiter)
+
+    splitArray.length match {
+      case 2 => splitArray(1)
+      case 3 => splitArray(2)
+      case _ => throw new IllegalArgumentException(s"Provided input [$key] is not a valid feature key")
+    }
   }
 
   /**

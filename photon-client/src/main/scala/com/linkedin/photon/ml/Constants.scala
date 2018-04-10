@@ -37,9 +37,10 @@ object Constants {
    */
   val WILDCARD = "*"
 
+  val INTERCEPT_BAG = ""
   val INTERCEPT_NAME = "(INTERCEPT)"
   val INTERCEPT_TERM = ""
-  val INTERCEPT_KEY = Utils.getFeatureKey(INTERCEPT_NAME, INTERCEPT_TERM)
+  val INTERCEPT_KEY = Utils.getFeatureKey(INTERCEPT_BAG, INTERCEPT_NAME, INTERCEPT_TERM)
 
   /**
    * Default time zone for relative date calculations

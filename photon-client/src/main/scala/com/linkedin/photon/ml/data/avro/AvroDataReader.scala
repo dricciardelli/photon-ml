@@ -29,6 +29,7 @@ import org.apache.spark.sql.types.{MapType, StructField, StructType}
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 
 import com.linkedin.photon.ml.Constants
+import com.linkedin.photon.ml.data.DataReader.{InputColumnName, MergedColumnName}
 import com.linkedin.photon.ml.data.{DataReader, InputColumnsNames}
 import com.linkedin.photon.ml.index.{DefaultIndexMapLoader, IndexMap, IndexMapLoader}
 import com.linkedin.photon.ml.io.FeatureShardConfiguration
@@ -273,32 +274,34 @@ object AvroDataReader {
    */
   protected[data] def readFeaturesFromRecord(
       record: GenericRecord,
-      fieldNames: Set[String]): Array[(String, Double)] = {
+      fieldNames: Set[InputColumnName]): Array[(String, Double)] = {
 
     require(Option(record).nonEmpty, "Can't read features from an empty record.")
 
     fieldNames
-      .toSeq
       .flatMap { fieldName =>
         Some(record.get(fieldName)) match {
-          // Must have conversion to Seq at the end (labelled redundant by IDEA) or else typing compiler errors
-          case Some(recordList: JList[_]) => recordList.asScala.toSeq
-          case other => throw new IllegalArgumentException(
-            s"Expected feature list $fieldName to be a Java List, found instead: ${other.getClass.getName}.")
+
+          case Some(recordList: JList[_]) =>
+            // TODO
+            // Must have conversion to Seq at the end (labelled redundant by IDEA) or else typing compiler errors
+            recordList.asScala.map {
+
+              case record: GenericRecord =>
+                val name = Utils.getStringAvro(record, AvroFieldNames.NAME)
+                val term = Utils.getStringAvro(record, AvroFieldNames.TERM, isNullOK = true)
+                val value = Utils.getDoubleAvro(record, AvroFieldNames.VALUE)
+                val featureKey = Utils.getFeatureKey(fieldName, name, term)
+
+                featureKey -> value
+
+              case other =>
+                throw new IllegalArgumentException(s"$other in features list is not a GenericRecord")
+            }
+          case other =>
+            throw new IllegalArgumentException(
+              s"Expected feature list $fieldName to be a Java List, found instead: ${other.getClass.getName}.")
         }
-      }
-      .map {
-        case record: GenericRecord =>
-
-          val name = Utils.getStringAvro(record, AvroFieldNames.NAME)
-          val term = Utils.getStringAvro(record, AvroFieldNames.TERM, isNullOK = true)
-          val value = Utils.getDoubleAvro(record, AvroFieldNames.VALUE)
-          val featureKey = Utils.getFeatureKey(name, term)
-
-          featureKey -> value
-
-        case other =>
-          throw new IllegalArgumentException(s"$other in features list is not a GenericRecord")
       }
       .toArray
   }
@@ -313,7 +316,7 @@ object AvroDataReader {
    */
   protected[data] def readFeatureVectorFromRecord(
       record: GenericRecord,
-      fieldNames: Set[String],
+      fieldNames: Set[InputColumnName],
       featureMap: IndexMap): Vector = {
 
     require(Option(record).nonEmpty, "Can't read features from an empty record.")
