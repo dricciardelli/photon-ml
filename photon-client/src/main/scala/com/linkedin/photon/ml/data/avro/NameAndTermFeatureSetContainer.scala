@@ -14,94 +14,170 @@
  */
 package com.linkedin.photon.ml.data.avro
 
+import java.util.{List => JList}
+
+import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
+
+import org.apache.avro.generic.GenericRecord
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkContext
+import org.apache.spark.rdd.RDD
 
-import com.linkedin.photon.ml.util.IOUtils
+import com.linkedin.photon.ml.Constants
+import com.linkedin.photon.ml.data.avro.NameAndTermFeatureSetContainer.{FeatureBag, NameAndTerm}
+import com.linkedin.photon.ml.util.{IOUtils, Utils}
 
 /**
- * A wrapper class for a map of feature section key to a set of [[NameAndTerm]] features
+ * A wrapper class for a map of feature bags to a set of features contained within that bag.
  *
- * @param nameAndTermFeatureSets A [[Map]] of feature section key to [[NameAndTerm]] feature sets
+ * @param nameAndTermFeatureSets A [[Map]] of [[FeatureBag]] to [[NameAndTerm]] feature sets
  */
-protected[ml] class NameAndTermFeatureSetContainer(nameAndTermFeatureSets: Map[String, Set[NameAndTerm]]) {
+protected[ml] class NameAndTermFeatureSetContainer private (nameAndTermFeatureSets: Map[FeatureBag, Set[NameAndTerm]]) {
+
+  import NameAndTermFeatureSetContainer._
 
   /**
-   * Get the map from feature name of type [[NameAndTerm]] to feature index of type [[Int]] based on the specified
-   * feature section keys from the input.
+   * Get a map of feature key to index for the set of all [[NameAndTerm]] features in the specified feature bags.
    *
-   * @param featureSectionKeys The specified feature section keys to generate the name to index map explained above
-   * @param isAddingIntercept Whether to add a dummy variable to the generated feature map to learn an intercept term
-   * @return The generated map from feature name of type [[NameAndTerm]] to feature index of type [[Int]]
+   * @param featureSectionKeys The feature bags for which to generate an index map
+   * @param isAddingIntercept Whether to add a dummy feature to the generated index map for the intercept term
+   * @return A map from feature key to index
    */
-  def getFeatureNameAndTermToIndexMap(
-      featureSectionKeys: Set[String],
-      isAddingIntercept: Boolean): Map[NameAndTerm, Int] = {
+  def getIndexMap(featureSectionKeys: Set[FeatureBag], isAddingIntercept: Boolean): Map[String, Int] = {
 
     val featureNameAndTermToIndexMap = nameAndTermFeatureSets
       .filterKeys(featureSectionKeys.contains)
       .values
       .fold(Set[NameAndTerm]())(_ ++ _)
+      .map { case (name, term) =>
+        Utils.getFeatureKey(name, term)
+      }
       .zipWithIndex
       .toMap
 
     if (isAddingIntercept) {
-      featureNameAndTermToIndexMap + (NameAndTerm.INTERCEPT_NAME_AND_TERM -> featureNameAndTermToIndexMap.size)
+      featureNameAndTermToIndexMap + (Constants.INTERCEPT_KEY -> featureNameAndTermToIndexMap.size)
     } else {
       featureNameAndTermToIndexMap
     }
   }
 
   /**
-   * Write each of the feature map to HDFS.
+   * Write the feature maps to HDFS as text files.
    *
-   * @param nameAndTermFeatureSetContainerOutputDir The HDFS directory to write the feature sets as text files
    * @param sc The Spark context
+   * @param outputDir The HDFS directory to write the feature sets as text files
    */
-  def saveAsTextFiles(nameAndTermFeatureSetContainerOutputDir: String, sc: SparkContext): Unit = {
+  def saveAsTextFiles(sc: SparkContext, outputDir: String): Unit =
     nameAndTermFeatureSets.foreach { case (featureSectionKey, featureSet) =>
-      val featureSetPath = new Path(nameAndTermFeatureSetContainerOutputDir, featureSectionKey)
-      saveNameAndTermSetAsTextFiles(featureSet, sc, featureSetPath)
+      saveNameAndTermFeatureSetToTextFile(
+        featureSet,
+        new Path(outputDir, featureSectionKey),
+        sc.hadoopConfiguration)
     }
-  }
-
-  /**
-   * Write the [[Set]] of [[NameAndTerm]]s to HDFS as text files.
-   *
-   * @param nameAndTermSet The map to be written
-   * @param sc The Spark context
-   * @param outputPath The HDFS path to which write the map
-   */
-  private def saveNameAndTermSetAsTextFiles(
-      nameAndTermSet: Set[NameAndTerm],
-      sc: SparkContext,
-      outputPath: Path): Unit = {
-
-    val iterator = nameAndTermSet.iterator.map(_.toString)
-    IOUtils.writeStringsToHDFS(iterator, outputPath, sc.hadoopConfiguration, forceOverwrite = false)
-  }
 }
 
 object NameAndTermFeatureSetContainer {
 
+  type NameAndTerm = (String, String)
+  type FeatureBag = String
+
+  val TEXT_DELIMITER = "\t"
+
   /**
-   * Parse the [[NameAndTermFeatureSetContainer]] from text files on HDFS.
+   * Generate a [[NameAndTermFeatureSetContainer]] from a [[RDD]] of [[GenericRecord]]s.
    *
-   * @param nameAndTermFeatureSetContainerInputDir The input HDFS directory
-   * @param featureSectionKeys The set of feature section keys to look for from the input directory
+   * @param genericRecords The input [[RDD]] of [[GenericRecord]]s.
+   * @param featureBags The set of feature bags to read
+   * @return The generated [[NameAndTermFeatureSetContainer]]
+   */
+  def readFromGenericRecords(
+      genericRecords: RDD[GenericRecord],
+      featureBags: Set[String],
+      numPartitions: Int): NameAndTermFeatureSetContainer = {
+
+    val nameAndTermFeatureSets = featureBags
+      .map { featureSectionKey =>
+        (featureSectionKey,
+          readNameAndTermFeatureSetFromGenericRecords(genericRecords, featureSectionKey, numPartitions))
+      }
+      .toMap
+
+    new NameAndTermFeatureSetContainer(nameAndTermFeatureSets)
+  }
+
+  /**
+   * Parse a set of [[NameAndTerm]] features from a [[RDD]] of feature bags (stored in Avro records).
+   *
+   * @param genericRecords The input [[RDD]] of Avro records
+   * @param featureBag The feature bag to parse in each record
+   * @return A set of parsed [[NameAndTerm]] features
+   */
+  private def readNameAndTermFeatureSetFromGenericRecords(
+      genericRecords: RDD[GenericRecord],
+      featureBag: String,
+      numPartitions: Int): Set[NameAndTerm] = {
+
+    genericRecords
+      .flatMap {
+        _.get(featureBag) match {
+          case recordList: JList[_] =>
+            recordList.asScala.map {
+              case record: GenericRecord =>
+                readNameAndTermFromGenericRecord(record)
+
+              case any =>
+                throw new IllegalArgumentException(
+                  s"Found object with class '${any.getClass}' in features list '$featureBag': expected record" +
+                    s"containing 'name', 'term', and 'value' fields")
+
+            }
+
+          case _ =>
+            throw new IllegalArgumentException(
+              s"'$featureBag' is not a list (or may be null): expected list of records containing 'name', " +
+                s"'term', and 'value' fields")
+        }
+      }
+      .distinct(numPartitions)
+      .collect()
+      .toSet
+  }
+
+  /**
+   * Read a feature composed of two parts (name and term) from an Avro record.
+   *
+   * @param record The input Avro record
+   * @return The parsed feature
+   */
+  private def readNameAndTermFromGenericRecord(record: GenericRecord): NameAndTerm = {
+
+    val name = Utils.getStringAvro(record, AvroFieldNames.NAME)
+    val term = Utils.getStringAvro(record, AvroFieldNames.TERM, isNullOK = true)
+
+    (name, term)
+  }
+
+  /**
+   * Generate a [[NameAndTermFeatureSetContainer]] from one or more text files on HDFS.
+   *
+   * @param path The input HDFS directory
+   * @param featureBags The set of feature bags to load from the input directory
    * @param configuration The Hadoop configuration
    * @return This [[NameAndTermFeatureSetContainer]] parsed from text files on HDFS
    */
-  protected[ml] def readNameAndTermFeatureSetContainerFromTextFiles(
-      nameAndTermFeatureSetContainerInputDir: Path,
-      featureSectionKeys: Set[String],
-      configuration: Configuration): NameAndTermFeatureSetContainer = {
+  protected[ml] def readFromTextFiles(
+    path: Path,
+    featureBags: Set[String],
+    configuration: Configuration): NameAndTermFeatureSetContainer = {
 
-    val nameAndTermFeatureSets = featureSectionKeys
+    val nameAndTermFeatureSets = featureBags
       .map { featureSectionKey =>
-        val inputPath = new Path(nameAndTermFeatureSetContainerInputDir, featureSectionKey)
-        val nameAndTermFeatureSet = readNameAndTermSetFromTextFiles(inputPath, configuration)
+        val inputPath = new Path(path, featureSectionKey)
+        val nameAndTermFeatureSet = readNameAndTermFeatureSetFromTextFile(inputPath, configuration)
+
         (featureSectionKey, nameAndTermFeatureSet)
       }
       .toMap
@@ -116,17 +192,42 @@ object NameAndTermFeatureSetContainer {
    * @param configuration the Hadoop configuration
    * @return The [[Set]] of [[NameAndTerm]] read from the text files of the given input path
    */
-  private def readNameAndTermSetFromTextFiles(inputPath: Path, configuration: Configuration): Set[NameAndTerm] =
+  private def readNameAndTermFeatureSetFromTextFile(inputPath: Path, configuration: Configuration): Set[NameAndTerm] =
     IOUtils
       .readStringsFromHDFS(inputPath, configuration)
-      .map { string =>
-        string.split("\t") match {
-          case Array(name, term) => NameAndTerm(name, term)
-          case Array(name) => NameAndTerm(name, "")
-          case other => throw new UnsupportedOperationException(
-            s"Unexpected entry $string when parsing it to NameAndTerm, " +
-              s"after splitting by tab the expected number of tokens is 1 or 2, but found ${other.length}}.")
+      .map { feature =>
+        feature.split(TEXT_DELIMITER) match {
+          case Array(name, term) =>
+            (name, term)
+
+          case Array(name) =>
+            (name, "")
+
+          case other =>
+            throw new UnsupportedOperationException(
+              s"Error parsing feature '$feature' from '$inputPath': expected 1 or 2 tokens but found ${other.length}")
         }
       }
       .toSet
+
+  /**
+   * Write a [[Set]] of [[NameAndTerm]] features to HDFS as text files.
+   *
+   * @param nameAndTermFeatureSet The map to be written
+   * @param outputPath The HDFS path to which to write the features
+   * @param configuration The Hadoop configuration
+   */
+  private def saveNameAndTermFeatureSetToTextFile(
+      nameAndTermFeatureSet: Set[NameAndTerm],
+      outputPath: Path,
+      configuration: Configuration): Unit = {
+
+    val iterator = nameAndTermFeatureSet
+      .iterator
+      .map { case (name, term) =>
+        name + TEXT_DELIMITER + term
+      }
+
+    IOUtils.writeStringsToHDFS(iterator, outputPath, configuration, forceOverwrite = false)
+  }
 }

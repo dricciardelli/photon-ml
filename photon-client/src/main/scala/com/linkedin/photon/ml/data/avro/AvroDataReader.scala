@@ -289,13 +289,18 @@ object AvroDataReader {
       }
       .map {
         case record: GenericRecord =>
-          val nameAndTerm = AvroUtils.readNameAndTermFromGenericRecord(record)
-          val featureKey = Utils.getFeatureKey(nameAndTerm.name, nameAndTerm.term)
 
-          featureKey -> Utils.getDoubleAvro(record, TrainingExampleFieldNames.VALUE)
+          val name = Utils.getStringAvro(record, AvroFieldNames.NAME)
+          val term = Utils.getStringAvro(record, AvroFieldNames.TERM, isNullOK = true)
+          val value = Utils.getDoubleAvro(record, AvroFieldNames.VALUE)
+          val featureKey = Utils.getFeatureKey(name, term)
 
-        case other => throw new IllegalArgumentException(s"$other in features list is not a GenericRecord")
-      }.toArray
+          featureKey -> value
+
+        case other =>
+          throw new IllegalArgumentException(s"$other in features list is not a GenericRecord")
+      }
+      .toArray
   }
 
   /**

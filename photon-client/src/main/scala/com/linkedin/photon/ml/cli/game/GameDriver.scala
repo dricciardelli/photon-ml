@@ -186,14 +186,14 @@ trait GameDriver extends PhotonParams {
 
     val shardConfigs = getRequiredParam(featureShardConfigurations)
     val allFeatureSectionKeys = shardConfigs.values.map(_.featureBags).reduce(_ ++ _)
-    val nameAndTermFeatureSetContainer = NameAndTermFeatureSetContainer.readNameAndTermFeatureSetContainerFromTextFiles(
+    val nameAndTermFeatureSetContainer = NameAndTermFeatureSetContainer.readFromTextFiles(
       getRequiredParam(featureBagsDirectory),
       allFeatureSectionKeys,
       sc.hadoopConfiguration)
     val featureShardIdToFeatureMapLoader = shardConfigs.map { case (shardId, featureShardConfig) =>
-      val featureMap = nameAndTermFeatureSetContainer
-        .getFeatureNameAndTermToIndexMap(featureShardConfig.featureBags, featureShardConfig.hasIntercept)
-        .map { case (k, v) => Utils.getFeatureKey(k.name, k.term) -> v }
+      val featureMap = nameAndTermFeatureSetContainer.getIndexMap(
+        featureShardConfig.featureBags,
+        featureShardConfig.hasIntercept)
       val indexMapLoader = new DefaultIndexMapLoader(sc, featureMap)
 
       (shardId, indexMapLoader)

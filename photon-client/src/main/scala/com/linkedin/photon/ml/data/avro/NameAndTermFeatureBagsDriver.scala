@@ -168,12 +168,12 @@ object NameAndTermFeatureBagsDriver extends PhotonParams with Logging {
     }
     val records = AvroUtils.readAvroFiles(sc, inputPathsWithRanges, minPartitions)
     // numExecutors * 5 is too much for the distinct operation when the data is huge; use numExecutors instead.
-    val nameAndTermFeatureSetContainer = AvroUtils.readNameAndTermFeatureSetContainerFromGenericRecords(
+    val nameAndTermFeatureSetContainer = NameAndTermFeatureSetContainer.readFromGenericRecords(
       records,
       getRequiredParam(featureBagsKeys),
       numExecutors)
 
-    nameAndTermFeatureSetContainer.saveAsTextFiles(getRequiredParam(rootOutputDirectory).toString, sc)
+    nameAndTermFeatureSetContainer.saveAsTextFiles(sc, getRequiredParam(rootOutputDirectory).toString)
   }
 
   /**

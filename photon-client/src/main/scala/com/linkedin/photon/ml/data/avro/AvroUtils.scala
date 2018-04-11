@@ -15,10 +15,8 @@
 package com.linkedin.photon.ml.data.avro
 
 import java.lang.{Double => JDouble}
-import java.util.{List => JList}
-
 import scala.collection.JavaConversions._
-import scala.collection.JavaConverters._
+
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
@@ -189,7 +187,7 @@ object AvroUtils {
    * Convert the vector of type [[Vector[Double]] to an array of Avro records of type [[NameTermValueAvro]].
    *
    * @param vector The input vector
-   * @param featureMap A map of feature index of type [[Int]] to feature name of type [[NameAndTerm]]
+   * @param featureMap A map of feature name to feature index
    * @param sparsityThreshold The model sparsity threshold, or the minimum absolute value considered nonzero
    * @return An array of Avro records that contains the information of the input vector
    */
@@ -245,99 +243,10 @@ object AvroUtils {
     }
 
   /**
-   * Read the nameAndTerm of type [[NameAndTerm]] from Avro record of type [[GenericRecord]].
-   *
-   * @param record The input Avro record
-   * @return The nameAndTerm parsed from the Avro record
-   */
-  protected[avro] def readNameAndTermFromGenericRecord(record: GenericRecord): NameAndTerm = {
-    val name = Utils.getStringAvro(record, AvroFieldNames.NAME)
-    val term = Utils.getStringAvro(record, AvroFieldNames.TERM, isNullOK = true)
-    NameAndTerm(name, term)
-  }
-
-  /**
-   * Parse a set of nameAndTerm of type [[NameAndTerm]] from a RDD of Avro record of type [[GenericRecord]] with the
-   * user specified feature section keys.
-   *
-   * @param genericRecords The input Avro records
-   * @param featureSectionKey The user specified feature section keys
-   * @return A set of nameAndTerms parsed from the input Avro records
-   */
-  protected[avro] def readNameAndTermSetFromGenericRecords(
-      genericRecords: RDD[GenericRecord],
-      featureSectionKey: String,
-      numPartitions: Int): Set[NameAndTerm] = {
-
-    genericRecords
-      .flatMap {
-        _.get(featureSectionKey) match {
-          case recordList: JList[_] =>
-            recordList.asScala.map {
-              case record: GenericRecord =>
-                AvroUtils.readNameAndTermFromGenericRecord(record)
-
-              case any =>
-                throw new IllegalArgumentException(
-                  s"$any in features list is not a record. It needs to be an Avro record containingg a name and term for " +
-                    s"each feature.")
-
-            }
-          case _ =>
-            throw new IllegalArgumentException(
-              s"$featureSectionKey is not a list (and might be null). It needs to be a list of Avro records containing a " +
-                s"name and a term for each feature.")
-        }
-      }
-      .distinct(numPartitions)
-      .collect()
-      .toSet
-  }
-
-  /**
-   * Generate the [[NameAndTermFeatureSetContainer]] from a [[RDD]] of [[GenericRecord]]s.
-   *
-   * @param genericRecords The input [[RDD]] of [[GenericRecord]]s.
-   * @param featureSectionKeys The set of feature section keys of interest in the input generic records
-   * @return The generated [[NameAndTermFeatureSetContainer]]
-   */
-  protected[avro] def readNameAndTermFeatureSetContainerFromGenericRecords(
-      genericRecords: RDD[GenericRecord],
-      featureSectionKeys: Set[String],
-      numPartitions: Int): NameAndTermFeatureSetContainer = {
-
-    val nameAndTermFeatureSets = featureSectionKeys
-      .map { featureSectionKey =>
-        (featureSectionKey,
-          AvroUtils.readNameAndTermSetFromGenericRecords(
-            genericRecords,
-            featureSectionKey,
-            numPartitions))
-      }
-      .toMap
-
-    new NameAndTermFeatureSetContainer(nameAndTermFeatureSets)
-  }
-
-  /**
-   * Check whether a model contains an intercept term or not.
-   *
-   * @param path The path to read the model from
-   * @return Whether the model contains an intercept or not
-   */
-  protected[ml] def modelContainsIntercept(sc: SparkContext, path: Path): Boolean =
-    readFromSingleAvro[BayesianLinearModelAvro](sc, path.toString, BayesianLinearModelAvro.getClassSchema.toString)
-      .head
-      .getMeans
-      .map(nameTermValueAvro => NameAndTerm(nameTermValueAvro.getName.toString, nameTermValueAvro.getTerm.toString))
-      .toSet
-      .contains(NameAndTerm.INTERCEPT_NAME_AND_TERM)
-
-  /**
    * Convert the coefficients of type [[Coefficients]] to Avro record of type [[BayesianLinearModelAvro]].
    *
    * @param modelId The model's id
-   * @param featureMap The map from feature index of type [[Int]] to feature name of type [[NameAndTerm]]
+   * @param featureMap A map of feature name to feature index
    * @param sparsityThreshold The model sparsity threshold, or the minimum absolute value considered nonzero
    * @return The Avro record that contains the information of the input coefficients
    */
@@ -371,7 +280,7 @@ object AvroUtils {
    * Convert the Avro record of type [[BayesianLinearModelAvro]] to the model type [[GeneralizedLinearModel]].
    *
    * @param bayesianLinearModelAvro The input Avro record
-   * @param featureMap The map from feature name of type [[NameAndTerm]] to feature index of type [[Int]]
+   * @param featureMap A map of feature name to feature index
    * @return The generalized linear model converted from the Avro record
    */
   protected[avro] def convertBayesianLinearModelAvroToGLM(
