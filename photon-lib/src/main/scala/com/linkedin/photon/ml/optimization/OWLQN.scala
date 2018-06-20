@@ -17,6 +17,7 @@ package com.linkedin.photon.ml.optimization
 import breeze.linalg.Vector
 import breeze.optimize.{OWLQN => BreezeOWLQN}
 
+import com.linkedin.photon.ml.function.DiffFunction
 import com.linkedin.photon.ml.normalization.NormalizationContext
 import com.linkedin.photon.ml.util.BroadcastWrapper
 
@@ -44,6 +45,7 @@ class OWLQN(
     tolerance: Double = LBFGS.DEFAULT_TOLERANCE,
     maxNumIterations: Int = LBFGS.DEFAULT_MAX_ITER,
     constraintMap: Option[Map[Int, (Double, Double)]] = Optimizer.DEFAULT_CONSTRAINT_MAP,
+    priorCoefficientsOpt: Option[Vector[Double]] = None,
     isTrackingState: Boolean = Optimizer.DEFAULT_TRACKING_STATE)
   extends LBFGS(
     normalizationContext,
@@ -53,7 +55,42 @@ class OWLQN(
     constraintMap,
     isTrackingState) {
 
+  private var prevCoefficientsOpt: Option[Vector[Double]] = None
   protected var regularizationWeight: Double = l1RegWeight
+
+  /**
+   * Under the hood, this adaptor uses an OWLQN
+   * ([[http://www.scalanlp.org/api/breeze/index.html#breeze.optimize.OWLQN breeze.optimize.OWLQN]]) optimizer from
+   * Breeze to optimize functions with L1 penalty term. The DiffFunction is modified into a Breeze DiffFunction which
+   * the Breeze optimizer can understand. The L1 penalty is implemented in the optimizer level. See
+   * [[http://www.scalanlp.org/api/breeze/index.html#breeze.optimize.OWLQN breeze.optimize.OWLQN]].
+   */
+  override protected val breezeOptimizer = new BreezeOWLQN[Int, Vector[Double]](
+    maxNumIterations,
+    numCorrections,
+    scaleRegWeight _,
+    tolerance)
+
+  /**
+   *
+   * @param pos
+   * @return
+   */
+  private def scaleRegWeight(pos: Int) = prevCoefficientsOpt match {
+    case Some(prevCoefficients) =>
+      val B = prevCoefficients(pos)
+      val b = (priorCoefficientsOpt.get)(pos)
+      val regWeight = regularizationWeight * (1D - (b / B))
+
+      if ((b < 0 && b < B) || (b > 0 && b > B)) {
+        regWeight * -1D
+      } else {
+        regWeight
+      }
+
+    case None =>
+      regularizationWeight
+  }
 
   /**
    * L1 regularization getter.
@@ -72,15 +109,22 @@ class OWLQN(
   }
 
   /**
-   * Under the hood, this adaptor uses an OWLQN
-   * ([[http://www.scalanlp.org/api/breeze/index.html#breeze.optimize.OWLQN breeze.optimize.OWLQN]]) optimizer from
-   * Breeze to optimize functions with L1 penalty term. The DiffFunction is modified into a Breeze DiffFunction which
-   * the Breeze optimizer can understand. The L1 penalty is implemented in the optimizer level. See
-   * [[http://www.scalanlp.org/api/breeze/index.html#breeze.optimize.OWLQN breeze.optimize.OWLQN]].
+   * Run one iteration of the optimizer given the current state.
+   *
+   * @param objectiveFunction The objective function to be optimized
+   * @param currState The current optimizer state
+   * @param data The training data
+   * @return The updated state of the optimizer
    */
-  override protected val breezeOptimizer = new BreezeOWLQN[Int, Vector[Double]](
-    maxNumIterations,
-    numCorrections,
-    (_: Int) => regularizationWeight,
-    tolerance)
+  override protected def runOneIteration
+      (objectiveFunction: DiffFunction, currState: OptimizerState)
+      (data: objectiveFunction.Data): OptimizerState = {
+
+    priorCoefficientsOpt match {
+      case Some(_) => prevCoefficientsOpt = Some(currState.coefficients)
+      case None =>
+    }
+
+    super.runOneIteration(objectiveFunction, currState)(data)
+  }
 }

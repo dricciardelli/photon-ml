@@ -342,6 +342,7 @@ class GameEstimator(val sc: SparkContext, implicit val logger: Logger) extends P
     val results = Timed(s"Training models:") {
 
       var prevGameModel: Option[GameModel] = getInitialModel(trainingDatasets)
+      var flag: Boolean = true
 
       optimizationConfigurations.map { optimizationConfiguration =>
         val (gameModel, evaluations) = train(
@@ -349,9 +350,11 @@ class GameEstimator(val sc: SparkContext, implicit val logger: Logger) extends P
           trainingDatasets,
           coordinateDescent,
           normalizationContextWrappersOpt,
-          prevGameModel)
+          prevGameModel,
+          flag)
 
         prevGameModel = Some(gameModel)
+        flag = false
 
         (gameModel, optimizationConfiguration, evaluations)
       }
@@ -699,7 +702,8 @@ class GameEstimator(val sc: SparkContext, implicit val logger: Logger) extends P
       trainingDatasets: Map[CoordinateId, D forSome { type D <: Dataset[D] }],
       coordinateDescent: CoordinateDescent,
       normalizationContextWrappersOpt: Option[Map[CoordinateId, NormalizationContextWrapper]],
-      initialModelOpt: Option[GameModel] = None): (GameModel, Option[EvaluationResults]) = Timed(s"Train model:") {
+      initialModelOpt: Option[GameModel] = None,
+      flag: Boolean = false): (GameModel, Option[EvaluationResults]) = Timed(s"Train model:") {
 
     logger.info("Model configuration:")
     configuration.foreach { case (coordinateId, coordinateConfig) =>
@@ -735,6 +739,8 @@ class GameEstimator(val sc: SparkContext, implicit val logger: Logger) extends P
           } else {
             CoordinateFactory.build(
               trainingDatasets(coordinateId),
+              initialModelOpt.map(_.getModel(coordinateId)).getOrElse(None),
+              flag,
               configuration(coordinateId),
               lossFunctionFactory,
               glmConstructor,

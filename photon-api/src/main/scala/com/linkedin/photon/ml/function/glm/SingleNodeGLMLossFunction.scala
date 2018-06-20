@@ -137,15 +137,25 @@ object SingleNodeGLMLossFunction {
    */
   def apply(
       configuration: GLMOptimizationConfiguration,
-      singleLossFunction: PointwiseLossFunction): SingleNodeGLMLossFunction = {
+      singleLossFunction: PointwiseLossFunction,
+      priorCoefficientsOpt: Option[Vector[Double]] = None): SingleNodeGLMLossFunction = {
 
     val regularizationContext = configuration.regularizationContext
     val regularizationWeight = configuration.regularizationWeight
 
     regularizationContext.regularizationType match {
       case RegularizationType.L2 =>
-        new SingleNodeGLMLossFunction(singleLossFunction) with L2RegularizationTwiceDiff {
-          l2RegWeight = regularizationContext.getL2RegularizationWeight(regularizationWeight)
+        priorCoefficientsOpt match {
+          case Some(priorCoef) =>
+            new SingleNodeGLMLossFunction(singleLossFunction) with WarmL2RegularizationTwiceDiff {
+              l2RegWeight = regularizationContext.getL2RegularizationWeight(regularizationWeight)
+              priorCoefficients = priorCoef
+            }
+
+          case None =>
+            new SingleNodeGLMLossFunction(singleLossFunction) with L2RegularizationTwiceDiff {
+              l2RegWeight = regularizationContext.getL2RegularizationWeight(regularizationWeight)
+            }
         }
 
       case _ => new SingleNodeGLMLossFunction(singleLossFunction)

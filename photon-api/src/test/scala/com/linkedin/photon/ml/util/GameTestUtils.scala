@@ -248,9 +248,9 @@ trait GameTestUtils extends TestTemplateWithTmpDir {
     val configuration = RandomEffectOptimizationConfiguration(generateOptimizerConfig())
 
     RandomEffectOptimizationProblem(
-      dataset,
+      dataset.activeData.mapValues(_ => SingleNodeGLMLossFunction(configuration, LogisticLossFunction)),
+      None,
       configuration,
-      SingleNodeGLMLossFunction(configuration, LogisticLossFunction),
       LogisticRegressionModel.apply,
       NormalizationContextBroadcast(sc.broadcast(NoNormalization())))
   }

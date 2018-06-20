@@ -121,6 +121,7 @@ object SingleNodeOptimizationProblem {
       objectiveFunction: Function,
       glmConstructor: Coefficients => GeneralizedLinearModel,
       normalizationContext: BroadcastWrapper[NormalizationContext],
+      priorModelOpt: Option[GeneralizedLinearModel],
       isTrackingState: Boolean,
       isComputingVariance: Boolean): SingleNodeOptimizationProblem[Function] = {
 
@@ -130,7 +131,7 @@ object SingleNodeOptimizationProblem {
     // Will result in a runtime error if created Optimizer cannot be cast to an Optimizer that can handle the given
     // objective function.
     val optimizer = OptimizerFactory
-      .build(optimizerConfig, normalizationContext, regularizationContext, regularizationWeight, isTrackingState)
+      .build(optimizerConfig, normalizationContext, regularizationContext, priorModelOpt.map(_.coefficients.means), regularizationWeight, isTrackingState)
       .asInstanceOf[Optimizer[Function]]
 
     new SingleNodeOptimizationProblem(

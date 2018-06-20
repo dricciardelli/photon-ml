@@ -17,6 +17,7 @@ package com.linkedin.photon.ml.function.glm
 import com.linkedin.photon.ml.algorithm.Coordinate
 import com.linkedin.photon.ml.function.ObjectiveFunction
 import com.linkedin.photon.ml.optimization.game.{CoordinateOptimizationConfiguration, FixedEffectOptimizationConfiguration, RandomEffectOptimizationConfiguration}
+import com.linkedin.photon.ml.supervised.model.GeneralizedLinearModel
 
 /**
  * Helper for generalized linear model loss function related tasks.
@@ -33,14 +34,14 @@ object GLMLossFunction {
    */
   def buildFactory(
       lossFunction: PointwiseLossFunction,
-      treeAggregateDepth: Int): (CoordinateOptimizationConfiguration) => ObjectiveFunction =
-    (config: CoordinateOptimizationConfiguration) => {
+      treeAggregateDepth: Int): (CoordinateOptimizationConfiguration, Option[GeneralizedLinearModel]) => ObjectiveFunction =
+    (config: CoordinateOptimizationConfiguration, glmOpt: Option[GeneralizedLinearModel]) => {
       config match {
         case fEOptConfig: FixedEffectOptimizationConfiguration =>
           DistributedGLMLossFunction(fEOptConfig, lossFunction, treeAggregateDepth)
 
         case rEOptConfig: RandomEffectOptimizationConfiguration =>
-          SingleNodeGLMLossFunction(rEOptConfig, lossFunction)
+          SingleNodeGLMLossFunction(rEOptConfig, lossFunction, glmOpt.map(_.coefficients.means))
 
         case _ =>
           throw new UnsupportedOperationException(

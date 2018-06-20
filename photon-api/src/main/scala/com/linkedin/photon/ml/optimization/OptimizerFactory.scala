@@ -14,6 +14,8 @@
  */
 package com.linkedin.photon.ml.optimization
 
+import breeze.linalg.Vector
+
 import com.linkedin.photon.ml.function.TwiceDiffFunction
 import com.linkedin.photon.ml.normalization.NormalizationContext
 import com.linkedin.photon.ml.util.BroadcastWrapper
@@ -38,6 +40,7 @@ protected[ml] object OptimizerFactory {
       config: OptimizerConfig,
       normalizationContext: BroadcastWrapper[NormalizationContext],
       regularizationContext: RegularizationContext,
+      priorCoefficientsOpt: Option[Vector[Double]] = None,
       regularizationWeight: Double = 0,
       isTrackingState: Boolean = Optimizer.DEFAULT_TRACKING_STATE)
     : Optimizer[TwiceDiffFunction] =
@@ -50,6 +53,7 @@ protected[ml] object OptimizerFactory {
           tolerance = config.tolerance,
           maxNumIterations = config.maximumIterations,
           constraintMap = config.constraintMap,
+          priorCoefficientsOpt = priorCoefficientsOpt,
           isTrackingState = isTrackingState)
 
       case (OptimizerType.LBFGS, RegularizationType.L2 | RegularizationType.NONE) =>

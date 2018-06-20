@@ -14,11 +14,13 @@
  */
 package com.linkedin.photon.ml.optimization.game
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
-import com.linkedin.photon.ml.data.RandomEffectDataset
+import com.linkedin.photon.ml.Types.REId
 import com.linkedin.photon.ml.function.SingleNodeObjectiveFunction
 import com.linkedin.photon.ml.model.Coefficients
 import com.linkedin.photon.ml.normalization.{NormalizationContextBroadcast, NormalizationContextRDD, NormalizationContextWrapper}
@@ -132,47 +134,55 @@ object RandomEffectOptimizationProblem {
   /**
    * Factory method to create new RandomEffectOptimizationProblems.
    *
-   * @param randomEffectDataset The training data
+   * @param objectiveFunctions The objective functions to optimize
+   * @param initModelsOpt The coefficients of the prior models (if any)
    * @param configuration The optimizer configuration
-   * @param objectiveFunction The objective function to optimize
    * @param glmConstructor The function to use for producing GLMs from trained coefficients
    * @param normalizationContextWrapper The normalization context
    * @param isComputingVariance Should coefficient variances be computed in addition to the means?
    * @return A new RandomEffectOptimizationProblem
    */
-  protected[ml] def apply[RandomEffectObjective <: SingleNodeObjectiveFunction](
-      randomEffectDataset: RandomEffectDataset,
+  protected[ml] def apply[RandomEffectObjective <: SingleNodeObjectiveFunction : ClassTag](
+      objectiveFunctions: RDD[(REId, RandomEffectObjective)],
+      initModelsOpt: Option[RDD[(REId, GeneralizedLinearModel)]],
       configuration: GLMOptimizationConfiguration,
-      objectiveFunction: RandomEffectObjective,
       glmConstructor: Coefficients => GeneralizedLinearModel,
       normalizationContextWrapper: NormalizationContextWrapper,
       isTrackingState: Boolean = false,
       isComputingVariance: Boolean = false): RandomEffectOptimizationProblem[RandomEffectObjective] = {
 
+    val aaaaaaaaaa: RDD[(REId, (RandomEffectObjective, Option[GeneralizedLinearModel]))] = initModelsOpt match {
+      case Some(rdd) => objectiveFunctions.leftOuterJoin(rdd)
+      case None => objectiveFunctions.mapValues(objective => (objective, None))
+    }
+
     val optimizationProblems = normalizationContextWrapper match {
       case nCB: NormalizationContextBroadcast =>
-        randomEffectDataset
-          .activeData
-          .mapValues(_ =>
-            SingleNodeOptimizationProblem(
-              configuration,
-              objectiveFunction,
-              glmConstructor,
-              PhotonBroadcast(nCB.context),
-              isTrackingState,
-              isComputingVariance))
+        aaaaaaaaaa.mapValues { case (objectiveFunction, glmOpt) =>
+          SingleNodeOptimizationProblem(
+            configuration,
+            objectiveFunction,
+            glmConstructor,
+            PhotonBroadcast(nCB.context),
+            glmOpt,
+            isTrackingState,
+            isComputingVariance)
+        }
 
       case nCR: NormalizationContextRDD =>
-        nCR.contexts
-          .mapValues { norm =>
+        nCR
+          .contexts
+          .join(aaaaaaaaaa)
+          .mapValues { case (norm, (objectiveFunction, glmOpt)) =>
             SingleNodeOptimizationProblem(
               configuration,
               objectiveFunction,
               glmConstructor,
               PhotonNonBroadcast(norm),
+              glmOpt,
               isTrackingState,
               isComputingVariance)
-        }
+          }
     }
 
     new RandomEffectOptimizationProblem(optimizationProblems, isTrackingState)

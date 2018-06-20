@@ -47,6 +47,8 @@ class CoordinateFactoryTest {
 
     val coordinate = CoordinateFactory.build(
       mockDataset,
+      None,
+      false,
       optimizationConfiguration,
       LOSS_FUNCTION_FACTORY,
       GLM_CONSTRUCTOR,
@@ -78,6 +80,8 @@ class CoordinateFactoryTest {
 
     val coordinate = CoordinateFactory.build(
       mockDataset,
+      None,
+      false,
       optimizationConfiguration,
       LOSS_FUNCTION_FACTORY,
       GLM_CONSTRUCTOR,
@@ -105,6 +109,8 @@ class CoordinateFactoryTest {
 
     CoordinateFactory.build(
       mockDataset,
+      None,
+      false,
       optimizationConfiguration,
       LOSS_FUNCTION_FACTORY,
       GLM_CONSTRUCTOR,

@@ -18,7 +18,7 @@ import breeze.linalg.Vector
 import org.apache.spark.broadcast.Broadcast
 
 import com.linkedin.photon.ml.data.LabeledPoint
-import com.linkedin.photon.ml.function.{DiffFunction, L2RegularizationDiff, SingleNodeObjectiveFunction}
+import com.linkedin.photon.ml.function.{DiffFunction, L2RegularizationDiff, SingleNodeObjectiveFunction, WarmL2RegularizationDiff}
 import com.linkedin.photon.ml.normalization.NormalizationContext
 import com.linkedin.photon.ml.optimization.RegularizationType
 import com.linkedin.photon.ml.optimization.game.GLMOptimizationConfiguration
@@ -99,15 +99,26 @@ object SingleNodeSmoothedHingeLossFunction {
    * @param configuration The optimization problem configuration
    * @return A new SingleNodeSmoothedHingeLossFunction
    */
-  def apply(configuration: GLMOptimizationConfiguration): SingleNodeSmoothedHingeLossFunction = {
+  def apply(
+      configuration: GLMOptimizationConfiguration,
+      priorCoefficientsOpt: Option[Vector[Double]] = None): SingleNodeSmoothedHingeLossFunction = {
 
     val regularizationContext = configuration.regularizationContext
     val regularizationWeight = configuration.regularizationWeight
 
     regularizationContext.regularizationType match {
       case RegularizationType.L2 =>
-        new SingleNodeSmoothedHingeLossFunction with L2RegularizationDiff {
-          l2RegWeight = regularizationContext.getL2RegularizationWeight(regularizationWeight)
+        priorCoefficientsOpt match {
+          case Some(priorCoef) =>
+            new SingleNodeSmoothedHingeLossFunction with WarmL2RegularizationDiff {
+              l2RegWeight = regularizationContext.getL2RegularizationWeight(regularizationWeight)
+              priorCoefficients = priorCoef
+            }
+
+          case None =>
+            new SingleNodeSmoothedHingeLossFunction with L2RegularizationDiff {
+              l2RegWeight = regularizationContext.getL2RegularizationWeight(regularizationWeight)
+            }
         }
 
       case _ => new SingleNodeSmoothedHingeLossFunction

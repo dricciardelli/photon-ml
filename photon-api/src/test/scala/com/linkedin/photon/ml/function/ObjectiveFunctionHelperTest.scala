@@ -49,7 +49,7 @@ class ObjectiveFunctionHelperTest {
   def testBuildFactory(trainingTask: TaskType): Unit = {
 
     val objectiveFunction =
-      ObjectiveFunctionHelper.buildFactory(trainingTask, TREE_AGGREGATE_DEPTH)(COORDINATE_OPT_CONFIG)
+      ObjectiveFunctionHelper.buildFactory(trainingTask, TREE_AGGREGATE_DEPTH)(COORDINATE_OPT_CONFIG, None)
 
     trainingTask match {
       case TaskType.LOGISTIC_REGRESSION | TaskType.LINEAR_REGRESSION | TaskType.POISSON_REGRESSION =>

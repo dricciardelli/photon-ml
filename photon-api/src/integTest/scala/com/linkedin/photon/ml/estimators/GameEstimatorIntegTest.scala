@@ -416,7 +416,8 @@ object GameEstimatorIntegTest {
         trainingDatasets: Map[CoordinateId, D forSome { type D <: Dataset[D] }],
         coordinateDescent: CoordinateDescent,
         normalizationContextWrappersOpt: Option[Map[CoordinateId, NormalizationContextWrapper]] = None,
-        prevGameModelOpt: Option[GameModel] = None): (GameModel, Option[EvaluationResults]) =
+        prevGameModelOpt: Option[GameModel] = None,
+        flag: Boolean = false): (GameModel, Option[EvaluationResults]) =
       super.train(configuration, trainingDatasets, coordinateDescent, normalizationContextWrappersOpt, prevGameModelOpt)
   }
 }

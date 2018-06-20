@@ -189,7 +189,7 @@ object DistributedOptimizationProblem {
     // Will result in a runtime error if created Optimizer cannot be cast to an Optimizer that can handle the given
     // objective function.
     val optimizer = OptimizerFactory
-      .build(optimizerConfig, normalizationContext, regularizationContext, regularizationWeight, isTrackingState)
+      .build(optimizerConfig, normalizationContext, regularizationContext, None, regularizationWeight, isTrackingState)
       .asInstanceOf[Optimizer[Function]]
 
     new DistributedOptimizationProblem(

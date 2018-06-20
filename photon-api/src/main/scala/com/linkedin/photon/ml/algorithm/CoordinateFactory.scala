@@ -17,7 +17,7 @@ package com.linkedin.photon.ml.algorithm
 import com.linkedin.photon.ml.data.{Dataset, FixedEffectDataset, RandomEffectDatasetInProjectedSpace}
 import com.linkedin.photon.ml.function.ObjectiveFunctionHelper.ObjectiveFunctionFactory
 import com.linkedin.photon.ml.function.{DistributedObjectiveFunction, ObjectiveFunction, SingleNodeObjectiveFunction}
-import com.linkedin.photon.ml.model.Coefficients
+import com.linkedin.photon.ml.model.{Coefficients, DatumScoringModel, RandomEffectModel, RandomEffectModelInProjectedSpace}
 import com.linkedin.photon.ml.normalization.{NormalizationContextBroadcast, NormalizationContextWrapper}
 import com.linkedin.photon.ml.optimization.DistributedOptimizationProblem
 import com.linkedin.photon.ml.optimization.game.{CoordinateOptimizationConfiguration, FixedEffectOptimizationConfiguration, RandomEffectOptimizationConfiguration, RandomEffectOptimizationProblem}
@@ -49,6 +49,8 @@ object CoordinateFactory {
    */
   def build[D <: Dataset[D]](
       dataset: D,
+      initModelOpt: Option[DatumScoringModel],
+      flag: Boolean,
       coordinateOptConfig: CoordinateOptimizationConfiguration,
       lossFunctionConstructor: ObjectiveFunctionFactory,
       glmConstructor: (Coefficients) => GeneralizedLinearModel,
@@ -57,15 +59,13 @@ object CoordinateFactory {
       trackState: Boolean,
       computeVariance: Boolean): Coordinate[D] = {
 
-    val lossFunction: ObjectiveFunction = lossFunctionConstructor(coordinateOptConfig)
-
-    (dataset, coordinateOptConfig, lossFunction, normalizationContextWrapper) match {
+    (dataset, coordinateOptConfig, normalizationContextWrapper) match {
       case (
         fEDataset: FixedEffectDataset,
         fEOptConfig: FixedEffectOptimizationConfiguration,
-        distributedLossFunction: DistributedObjectiveFunction,
         normalizationContextBroadcast: NormalizationContextBroadcast) =>
 
+        val lossFunction = lossFunctionConstructor(coordinateOptConfig, None)
         val downSamplerOpt = if (DownSampler.isValidDownSamplingRate(fEOptConfig.downSamplingRate)) {
           Some(downSamplerFactory(fEOptConfig.downSamplingRate))
         } else {
@@ -76,7 +76,7 @@ object CoordinateFactory {
           fEDataset,
           DistributedOptimizationProblem(
             fEOptConfig,
-            distributedLossFunction,
+            lossFunction.asInstanceOf[DistributedObjectiveFunction],
             downSamplerOpt,
             glmConstructor,
             PhotonBroadcast(normalizationContextBroadcast.context),
@@ -86,15 +86,35 @@ object CoordinateFactory {
       case (
         rEDataset: RandomEffectDatasetInProjectedSpace,
         rEOptConfig: RandomEffectOptimizationConfiguration,
-        singleNodeLossFunction: SingleNodeObjectiveFunction,
         _) =>
+
+        val lossFunctions = (flag, initModelOpt) match {
+          case (true, Some(initModel)) =>
+            val modelsRDD = initModel match {
+              case remips: RandomEffectModelInProjectedSpace => remips.modelsInProjectedSpaceRDD
+              case rem: RandomEffectModel => rem.modelsRDD
+              case _ => throw new IllegalArgumentException("Random effect coordinate with non-random effect initial model")
+            }
+
+            rEDataset
+              .activeData
+              .leftOuterJoin(modelsRDD)
+              .mapValues { case (_, glmOpt) =>
+                lossFunctionConstructor(coordinateOptConfig, glmOpt).asInstanceOf[SingleNodeObjectiveFunction]
+              }
+
+          case _ =>
+            rEDataset
+              .activeData
+              .mapValues(_ => lossFunctionConstructor(coordinateOptConfig, None).asInstanceOf[SingleNodeObjectiveFunction])
+        }
 
         new RandomEffectCoordinateInProjectedSpace(
           rEDataset,
           RandomEffectOptimizationProblem(
-            rEDataset,
+            lossFunctions,
+            initModelOpt.map(_.asInstanceOf[RandomEffectModel].modelsRDD),
             rEOptConfig,
-            singleNodeLossFunction,
             glmConstructor,
             normalizationContextWrapper,
             trackState,
@@ -105,7 +125,6 @@ object CoordinateFactory {
           s"""Cannot build coordinate for the following input class combination:
           |  ${dataset.getClass.getName}
           |  ${coordinateOptConfig.getClass.getName}
-          |  ${lossFunction.getClass.getName}
           |  ${normalizationContextWrapper.getClass.getName}""".stripMargin)
     }
   }

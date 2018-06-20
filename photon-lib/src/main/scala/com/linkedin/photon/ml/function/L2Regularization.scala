@@ -15,7 +15,6 @@
 package com.linkedin.photon.ml.function
 
 import breeze.linalg.{DenseMatrix, Vector}
-import org.apache.spark.broadcast.Broadcast
 
 import com.linkedin.photon.ml.normalization.NormalizationContext
 import com.linkedin.photon.ml.util.BroadcastWrapper

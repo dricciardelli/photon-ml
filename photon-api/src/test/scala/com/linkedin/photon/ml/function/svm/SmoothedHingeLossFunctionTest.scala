@@ -47,7 +47,7 @@ class SmoothedHingeLossFunctionTest {
   @Test(dataProvider = "coordinateOptimizationProblemProvider")
   def testBuildFactory(coordinateOptConfig: CoordinateOptimizationConfiguration): Unit = {
 
-    val objectiveFunction = SmoothedHingeLossFunction.buildFactory(TREE_AGGREGATE_DEPTH)(coordinateOptConfig)
+    val objectiveFunction = SmoothedHingeLossFunction.buildFactory(TREE_AGGREGATE_DEPTH)(coordinateOptConfig, None)
 
     coordinateOptConfig match {
       case _: FixedEffectOptimizationConfiguration =>
