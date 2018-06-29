@@ -14,13 +14,13 @@
  */
 package com.linkedin.photon.ml.data.avro
 
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.types.DataTypes._
-import org.testng.Assert._
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.linalg.SQLDataTypes.VectorType
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
+import org.apache.spark.sql.types.DataTypes._
 import org.apache.spark.sql.types.{StructField, StructType}
+import org.testng.Assert._
 import org.testng.annotations.{DataProvider, Test}
 
 import com.linkedin.photon.ml.Constants.DELIMITER
@@ -74,10 +74,11 @@ class AvroDataWriterTest {
   def testGetValueAsDouble(row: Row): Unit = {
 
     val label = AvroDataWriter.getValueAsDouble(row, "response")
-    assertEquals(label, 1.0D)
     val offset = AvroDataWriter.getValueAsDouble(row, "offset")
-    assertEquals(offset, 0.0D)
     val weight = AvroDataWriter.getValueAsDouble(row, "weight")
+
+    assertEquals(label, 1.0D)
+    assertEquals(offset, 0.0D)
     assertEquals(weight, 1.0D)
   }
 
@@ -91,6 +92,7 @@ class AvroDataWriterTest {
         s"name1$DELIMITER" -> 1,
         s"${DELIMITER}term2" -> 2))
     val results = AvroDataWriter.buildAvroFeatures(vector, indexMap)
+
     assertEquals(results.size(), 3)
     assertEquals(results.get(0).getName, "name0")
     assertEquals(results.get(0).getTerm, "term0")

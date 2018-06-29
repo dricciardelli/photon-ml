@@ -30,6 +30,7 @@ class AvroDataWriterIntegTest extends SparkTestUtils with TestTemplateWithTmpDir
 
   @Test
   def testWrite(): Unit = sparkTest("testRead") {
+
     val dr = new AvroDataReader()
     val (df, indexMapLoadersMap) = dr.readMerged(inputPath.toString, featureShardConfigurationsMap, numPartitions)
     val outputDir = new Path(getTmpDir)
@@ -55,6 +56,7 @@ class AvroDataWriterIntegTest extends SparkTestUtils with TestTemplateWithTmpDir
 }
 
 object AvroDataWriterIntegTest {
+
   private val inputDir = getClass.getClassLoader.getResource("GameIntegTest/input").getPath
   private val inputPath = new Path(inputDir, "train")
   private val numPartitions = 4

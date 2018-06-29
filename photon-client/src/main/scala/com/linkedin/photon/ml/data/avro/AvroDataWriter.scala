@@ -14,8 +14,8 @@
  */
 package com.linkedin.photon.ml.data.avro
 
-import scala.collection.mutable.ListBuffer
 import scala.collection.JavaConversions._
+import scala.collection.mutable.ListBuffer
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapred.JobConf
@@ -27,7 +27,7 @@ import com.linkedin.photon.ml.Constants.DELIMITER
 import com.linkedin.photon.ml.index.{IndexMap, IndexMapLoader}
 
 /**
- * Write dataframe to Avro files on HDFS in [[SimplifiedResponsePrediction]] format
+ * Write [[DataFrame]] to Avro files on HDFS in [[SimplifiedResponsePrediction]] format.
  */
 class AvroDataWriter {
 
@@ -37,13 +37,13 @@ class AvroDataWriter {
   private val sc = sparkSession.sparkContext
 
   /**
-   * Write the DataFrame into avro records using the given indexMapLoader
+   * Write a [[DataFrame]] to HDFS in Avro format using the given [[IndexMapLoader]].
    *
-   * @param df The DataFrame
-   * @param outputPath The output path to store the avro files
-   * @param indexMapLoader The IndexMapLoader store feature to index information
-   * @param responseColumn The response column name in df
-   * @param featureColumn The feature column name in df
+   * @param df The [[DataFrame]]
+   * @param outputPath The output path at which to store the Avro files
+   * @param indexMapLoader The loader for the feature-to-index map
+   * @param responseColumn The response column name
+   * @param featureColumn The feature column name
    */
   def write(
     df: DataFrame,
@@ -53,15 +53,15 @@ class AvroDataWriter {
     featureColumn: String,
     overwrite: Boolean = false): Unit = {
 
-    // TODO: Save other fields in the dataset, i.e. feature columns
+    // TODO: Save other fields in the data set, i.e. feature columns
     val columns = df.columns
-    require(columns.contains(responseColumn), s"There must be a $responseColumn column present in dataframe")
-    require(columns.contains(featureColumn), s"There must be a $featureColumn column present in dataframe")
+    require(columns.contains(responseColumn), s"There must be a $responseColumn column present in DataFrame")
+    require(columns.contains(featureColumn), s"There must be a $featureColumn column present in DataFrame")
 
     val hasOffset = columns.contains(OFFSET)
     val hasWeight = columns.contains(WEIGHT)
 
-    val avroDataset = df.rdd.mapPartitions { rows =>
+    val avroDataSet = df.rdd.mapPartitions { rows =>
       val indexMap = indexMapLoader.indexMapForRDD()
       val rowBuilder = SimplifiedResponsePrediction.newBuilder()
 
@@ -70,6 +70,7 @@ class AvroDataWriter {
         val response = getValueAsDouble(r, responseColumn)
         val offset = if (hasOffset) getValueAsDouble(r, OFFSET) else DEFAULTS(OFFSET)
         val weight = if (hasWeight) getValueAsDouble(r, WEIGHT) else DEFAULTS(WEIGHT)
+
         rowBuilder
           .setResponse(response)
           .setOffset(offset)
@@ -79,17 +80,18 @@ class AvroDataWriter {
       }
     }
 
-    // Write the converted dataset back to HDFS
+    // Write the converted data set back to HDFS
     if (overwrite) {
       val fs = FileSystem.get(sc.hadoopConfiguration)
       val output = new Path(outputPath)
+
       if (fs.exists(output)) {
         fs.delete(output, true)
       }
     }
 
     AvroUtils.saveAsAvro[SimplifiedResponsePrediction](
-      avroDataset,
+      avroDataSet,
       outputPath,
       SimplifiedResponsePrediction.getClassSchema.toString,
       new JobConf(sc.hadoopConfiguration))
@@ -103,57 +105,57 @@ object AvroDataWriter {
   val DEFAULTS = Map(OFFSET -> 0.0D, WEIGHT -> 1.0D)
 
   /**
-   * Helper function to convert Row index field to double
+   * Read an indexed field in a [[Row]] as a Double.
    *
    * @param row A training record in [[Row]] format
    * @param fieldName The index of particular field
-   * @return A double in this field
+   * @return The Double value of the field
    */
-  protected[data] def getValueAsDouble(row: Row, fieldName: String): Double = {
+  protected[data] def getValueAsDouble(row: Row, fieldName: String): Double = row.getAs[Any](fieldName) match {
+    case null =>
+      DEFAULTS.getOrElse(fieldName, throw new IllegalArgumentException(s"Unsupported null for fieldName $fieldName"))
 
-    row.getAs[Any](fieldName) match {
-      case null =>
-        DEFAULTS.getOrElse(fieldName, throw new IllegalArgumentException(s"Unsupported null for fieldName $fieldName"))
+    case n: Number =>
+      n.doubleValue
 
-      case n: Number =>
-        n.doubleValue
+    case s: String =>
+      s.toDouble
 
-      case s: String =>
-        s.toDouble
+    case b: Boolean =>
+      if (b) 1.0D else 0.0D
 
-      case b: Boolean =>
-        if (b) 1.0D else 0.0D
-
-      case _ =>
-        throw new IllegalArgumentException(s"Unsupported data type")
-    }
+    case _ =>
+      throw new IllegalArgumentException(s"Unsupported data type")
   }
 
   /**
-   * Build a list of Avro Feature instances for the given list [[Vector]] and [[IndexMap]]
+   * Build a list of Avro features ([[FeatureAvro]] objects) for a [[Vector]], given the [[IndexMap]].
    *
-   * @param vector The extracted feature in [[Vector]] for a particular training instance
+   * @param vector The features for a particular datum, in [[Vector]] format
    * @param indexMap The reverse index map from feature to index
-   * @return A list of Avro Feature instances built from the vector
+   * @return A list of Avro features corresponding to the input vector
    */
   protected[data] def buildAvroFeatures(vector: Vector, indexMap: IndexMap): java.util.List[FeatureAvro] = {
 
     val builder = FeatureAvro.newBuilder()
     val avroFeatures = new ListBuffer[FeatureAvro]
-    vector.foreachActive {
-      case (vectorIdx, vectorValue) =>
-        val feature = indexMap.getFeatureName(vectorIdx).get
-        feature.split(DELIMITER) match {
-          case Array(name, term) =>
-            builder.setName(name).setTerm(term)
-          case Array(name) =>
-            builder.setName(name).setTerm("")
-          case _ =>
-            throw new IllegalArgumentException(s"Error parsing the name and term for this feature $feature")
-        }
-        builder.setValue(vectorValue)
-        avroFeatures += builder.build()
+
+    vector.foreachActive { case (vectorIdx, vectorValue) =>
+      val feature = indexMap.getFeatureName(vectorIdx).get
+
+      feature.split(DELIMITER) match {
+        case Array(name, term) =>
+          builder.setName(name).setTerm(term)
+        case Array(name) =>
+          builder.setName(name).setTerm("")
+        case _ =>
+          throw new IllegalArgumentException(s"Error parsing the name and term for this feature $feature")
+      }
+      builder.setValue(vectorValue)
+
+      avroFeatures += builder.build()
     }
+
     avroFeatures.toList
   }
 }
