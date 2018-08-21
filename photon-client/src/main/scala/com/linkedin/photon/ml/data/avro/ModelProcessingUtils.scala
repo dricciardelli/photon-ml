@@ -29,7 +29,7 @@ import org.apache.spark.storage.StorageLevel
 
 import com.linkedin.photon.avro.generated.{BayesianLinearModelAvro, FeatureSummarizationResultAvro}
 import com.linkedin.photon.ml.TaskType.TaskType
-import com.linkedin.photon.ml.Types.{CoordinateId, FeatureShardId}
+import com.linkedin.photon.ml.Types.{CoordinateId, FeatureShardId, REId}
 import com.linkedin.photon.ml.cli.game.training.GameTrainingDriver
 import com.linkedin.photon.ml.estimators.GameEstimator
 import com.linkedin.photon.ml.index.{IndexMap, IndexMapLoader}
@@ -228,8 +228,11 @@ object ModelProcessingUtils {
           }
           val modelsRDDInputPath = new Path(innerPath, AvroConstants.COEFFICIENTS)
           val modelsRDD = loadModelsRDDFromHDFS(modelsRDDInputPath.toString, indexMapLoader, sc)
+          val model = new RandomEffectModel(modelsRDD, randomEffectType, featureShardId)
+            .setName(s"Random Effect models for coordinate '$name', type '$randomEffectType'")
+            .persistRDD(storageLevel)
 
-          (name, new RandomEffectModel(modelsRDD, randomEffectType, featureShardId).persistRDD(storageLevel))
+          (name, model)
         }
 
     } else {
@@ -380,7 +383,7 @@ object ModelProcessingUtils {
   private def loadModelsRDDFromHDFS(
       coefficientsRDDInputDir: String,
       indexMapLoader: IndexMapLoader,
-      sc: SparkContext): RDD[(String, GeneralizedLinearModel)] = {
+      sc: SparkContext): RDD[(REId, GeneralizedLinearModel)] = {
 
     val modelAvros = AvroUtils.readAvroFilesInDir[BayesianLinearModelAvro](
       sc,

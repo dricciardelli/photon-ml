@@ -22,6 +22,7 @@ import com.linkedin.photon.ml.TaskType.TaskType
 import com.linkedin.photon.ml.Types.CoordinateId
 import com.linkedin.photon.ml.data.GameDatum
 import com.linkedin.photon.ml.data.scoring.{CoordinateDataScores, ModelDataScores}
+import com.linkedin.photon.ml.spark.{BroadcastLike, RDDLike}
 import com.linkedin.photon.ml.util.ClassUtils
 
 /**
@@ -87,6 +88,22 @@ class GameModel (private val gameModels: Map[CoordinateId, DatumScoringModel]) e
    * @return The (modelName -> model) map representation of this GAME model
    */
   def toSortedMap: SortedMap[CoordinateId, DatumScoringModel] = SortedMap(gameModels.toSeq: _*)
+
+  /**
+   * Clear any [[RDD]] or [[org.apache.spark.broadcast.Broadcast]] objects owned by the model from cache.
+   *
+   * @return This [[GameModel]]
+   */
+  def unpersist(): GameModel = {
+
+    gameModels.map {
+      case broadcastLike: BroadcastLike => broadcastLike.unpersistBroadcast()
+      case rddLike: RDDLike => rddLike.unpersistRDD()
+      case _ =>
+    }
+
+    this
+  }
 
   /**
    * Compute score, PRIOR to going through any link function, i.e. just compute a dot product of feature values

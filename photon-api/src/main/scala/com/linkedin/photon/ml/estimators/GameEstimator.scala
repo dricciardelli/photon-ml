@@ -466,8 +466,10 @@ class GameEstimator(val sc: SparkContext, implicit val logger: Logger) extends P
           isResponseRequired = true,
           getOrDefault(inputColumnNames))
         .partitionBy(gameDataPartitioner)
-        .setName("GAME training data")
+        .setName("Raw GAME training data with UIDs")
         .persist(StorageLevel.DISK_ONLY)
+
+      // TODO: DISK_ONLY_2 above?
     }
 
     getRequiredParam(coordinateDataConfigurations).map { case (coordinateId, config) =>
@@ -508,6 +510,7 @@ class GameEstimator(val sc: SparkContext, implicit val logger: Logger) extends P
 
           val rawRandomEffectDataset = RandomEffectDataset(gameDataset, reConfig, rePartitioner, existingModelKeysRddOpt)
             .setName(s"Random Effect Dataset: $coordinateId")
+            // TODO - probably remove both of these calls
             .persistRDD(StorageLevel.DISK_ONLY)
             .materialize()
           val projectorType = reConfig.projectorType

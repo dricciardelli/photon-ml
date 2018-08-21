@@ -362,8 +362,8 @@ object GameTrainingDriver extends GameDriver {
       readValidationData(avroDataReader, featureIndexMapLoaders)
     }
 
-    trainingData.persist(StorageLevel.DISK_ONLY)
-    validationData.map(_.persist(StorageLevel.DISK_ONLY))
+    trainingData.persist(StorageLevel.DISK_ONLY_2)
+    validationData.map(_.persist(StorageLevel.DISK_ONLY_2))
 
     val modelOpt = get(modelInputDirectory).map { modelDir =>
       Timed("Load model for warm-start training") {
@@ -600,11 +600,14 @@ object GameTrainingDriver extends GameDriver {
   private def calculateStatistics(
       data: DataFrame,
       featureIndexMapLoaders: IndexMapLoaders): FeatureShardStatistics =
-    featureIndexMapLoaders.map { case (featureShardId, indexMapLoader) =>
+    featureIndexMapLoaders.map { case (featureShardId , indexMapLoader) =>
 
       val summary = FeatureDataStatistics(
-        // Calling rdd explicitly here to avoid a typed encoder lookup in Spark 2.1
-        data.select(featureShardId).rdd.map(_.getAs[SparkMLVector](0)),
+      // Calling rdd explicitly here to avoid a typed encoder lookup in Spark 2.1
+
+        data.select(featureShardId)
+          .rdd
+          .map(_.getAs[SparkMLVector](0)),
         indexMapLoader.indexMapForDriver().get(Constants.INTERCEPT_KEY))
 
       (featureShardId, summary)

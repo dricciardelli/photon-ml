@@ -60,12 +60,37 @@ class AvroDataReader(defaultFeatureColumn: String = InputColumnsNames.FEATURES_D
   private val sc = sparkSession.sparkContext
 
   /**
+   * Read Avro records into a [[RDD]] with the minimum number of partitions.
+   *
+   * @param paths The paths to the files or folders
+   * @param numPartitions The minimum number of partitions. Spark is generally moving away from manually specifying
+   *                      partition counts like this, in favor of inferring it. However, Photon currently still exposes
+   *                      partition counts as a means for tuning job performance. The auto-inferred counts are usually
+   *                      much lower than the necessary counts for Photon (especially GAME), so this caused a lot of
+   *                      shuffling when repartitioning from the auto-partitioned data to the GAME data. We expose this
+   *                      setting here to avoid the shuffling.
+   * @return A [[RDD]] of Avro records loaded from the given paths
+   */
+  private def readRecords(paths: Seq[String], numPartitions: Int): RDD[GenericRecord] = {
+
+    val records = AvroUtils.readAvroFiles(sc, paths, numPartitions)
+
+    // Check partitions and force repartition if there are too few (sometimes AvroUtils does not respect min partitions
+    // request)
+    if (records.getNumPartitions < numPartitions) {
+      records.repartition(numPartitions)
+    } else {
+      records
+    }
+  }
+
+  /**
    * Reads the avro files at the given paths into a DataFrame, generating a default index map for feature names. Merges
    * source columns into combined feature vectors as specified by the featureColumnMap argument. Often features are
    * joined from different sources, and it can be more scalable to combine them into problem-specific feature vectors
    * that can be independently distributed.
    *
-   * @param paths The path to the files or folders
+   * @param paths The paths to the files or folders
    * @param featureColumnConfigsMap A map that specifies how the feature columns should be merged. The keys specify the
    *                                name of the merged destination column, and the values are configs containing sets of
    *                                source columns to merge, e.g.:
@@ -90,7 +115,7 @@ class AvroDataReader(defaultFeatureColumn: String = InputColumnsNames.FEATURES_D
     require(paths.nonEmpty, "No paths specified. You must specify at least one input path.")
     require(numPartitions >= 0, "Partition count cannot be negative.")
 
-    val records = AvroUtils.readAvroFiles(sc, paths, numPartitions)
+    val records = readRecords(paths, numPartitions)
     val featureColumnMap = featureColumnConfigsMap.mapValues(_.featureBags).map(identity)
     val interceptColumnMap = featureColumnConfigsMap.mapValues(_.hasIntercept).map(identity)
     val indexMapLoaders = generateIndexMapLoaders(records, featureColumnMap, interceptColumnMap)
@@ -104,7 +129,7 @@ class AvroDataReader(defaultFeatureColumn: String = InputColumnsNames.FEATURES_D
    * different sources, and it can be more scalable to combine them into problem-specific feature vectors that can be
    * independently distributed.
    *
-   * @param paths The path to the files or folders
+   * @param paths The paths to the files or folders
    * @param indexMapLoaders A map of index map loaders, containing one loader for each merged feature column
    * @param featureColumnConfigsMap A map that specifies how the feature columns should be merged. The keys specify the
    *                                name of the merged destination column, and the values are configs containing sets of
@@ -131,17 +156,10 @@ class AvroDataReader(defaultFeatureColumn: String = InputColumnsNames.FEATURES_D
     require(paths.nonEmpty, "No paths specified. You must specify at least one input path.")
     require(numPartitions >= 0, "Partition count cannot be negative.")
 
+    val records = readRecords(paths, numPartitions)
     val featureColumnMap = featureColumnConfigsMap.mapValues(_.featureBags).map(identity)
-    val records = AvroUtils.readAvroFiles(sc, paths, numPartitions)
-    // Check partitions and force repartition if there are too few - sometimes AvroUtils does not respect min partitions
-    // request
-    val partitionedRecords = if (records.getNumPartitions < numPartitions) {
-      records.repartition(numPartitions)
-    } else {
-      records
-    }
 
-    readMerged(partitionedRecords, indexMapLoaders, featureColumnMap)
+    readMerged(records, indexMapLoaders, featureColumnMap)
   }
 
   /**
@@ -353,8 +371,8 @@ object AvroDataReader {
    */
   protected[data] def inferSchemaFields(records: RDD[GenericRecord]): Option[Seq[StructField]] =
     records
-      .map(_.getSchema.getFields.asScala.flatMap(f => avroTypeToSql(f.name, f.schema)))
       .take(1)
+      .map(_.getSchema.getFields.asScala.flatMap(f => avroTypeToSql(f.name, f.schema)))
       .headOption
 
   /**

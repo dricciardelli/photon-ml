@@ -27,8 +27,7 @@ import com.linkedin.photon.ml.util.VectorUtils
  * Local dataset implementation.
  *
  * @note One design concern is whether to store the local data as a [[Map]] or an [[Array]] (high sort cost, but low
- *       merge cost vs. no sort cost but high merge cost). Currently, we use an [[Array]] since the data is only sorted
- *       once, and used as the base for all other data/score [[Array]]s.
+ *       merge cost vs. no sort cost but high merge cost). Currently, we use an [[Array]].
  *
  * @param dataPoints Local data points consists of (globalId, labeledPoint) pairs
  */

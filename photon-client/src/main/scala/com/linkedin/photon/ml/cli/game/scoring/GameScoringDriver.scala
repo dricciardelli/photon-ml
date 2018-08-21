@@ -236,20 +236,19 @@ object GameScoringDriver extends GameDriver {
         Some(scoredGameDatum.weight),
         scoredGameDatum.idTagToValueMap)
     }
+    val scoredItemsToBeSaved = get(outputFilesLimit) match {
+      case Some(limit) if limit < scoredItems.partitions.length => scoredItems.coalesce(limit)
+      case _ => scoredItems
+    }
+    val scoresDir = new Path(getRequiredParam(rootOutputDirectory), SCORES_DIR)
 
     if (getOrDefault(logDataAndModelStats)) {
       // Persist scored items here since we introduce multiple passes
-      scoredItems.setName("Scored items").persist(StorageLevel.MEMORY_AND_DISK)
+      scoredItemsToBeSaved.setName("Scored items").persist(StorageLevel.MEMORY_AND_DISK)
 
       val numScoredItems = scoredItems.count()
       logger.info(s"Number of scored items to be written to HDFS: $numScoredItems \n")
     }
-
-    val scoredItemsToBeSaved = get(outputFilesLimit) match {
-      case Some(limit) if limit < scoredItems.partitions.length => scoredItems.coalesce(getOrDefault(outputFilesLimit))
-      case _ => scoredItems
-    }
-    val scoresDir = new Path(getRequiredParam(rootOutputDirectory), SCORES_DIR)
 
     ScoreProcessingUtils.saveScoredItemsToHDFS(scoredItemsToBeSaved, scoresDir.toString, get(modelId))
     scoredItems.unpersist()
