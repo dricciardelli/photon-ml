@@ -14,8 +14,6 @@
  */
 package com.linkedin.photon.ml.optimization
 
-import scala.collection.Map
-
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -108,6 +106,7 @@ protected[ml] class RandomEffectOptimizationTracker(val optimizationStatesTracke
       }
       .reduceByKey(_ + _)
       .collectAsMap()
+      .toMap
 
   /**
    * Get stats counter of the number of iterations tracked in all optimization states trackers
@@ -153,6 +152,6 @@ protected[ml] class RandomEffectOptimizationTracker(val optimizationStatesTracke
 object RandomEffectOptimizationTracker{
 
   protected[optimization] val NOT_CONVERGED = "Not converged"
-  protected[optimization] val SUMMARY_FORMAT = "Convergence reasons stats:\n%s\nNumber of iterations stats: %s\n" +
-    "Time elapsed stats: %s"
+  protected[optimization] val SUMMARY_FORMAT =
+    "Convergence reasons stats:\n%s\nNumber of iterations stats: %s\nTime elapsed stats: %s"
 }

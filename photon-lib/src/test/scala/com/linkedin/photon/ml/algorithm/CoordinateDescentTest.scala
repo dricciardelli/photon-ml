@@ -233,7 +233,7 @@ class CoordinateDescentTest {
 
     when(validationScore + validationScore).thenReturn(validationScore)
     when(validationScore - validationScore).thenReturn(validationScore)
-    when(validationScore.scores).thenReturn(modelScores)
+    when(validationScore.scoresRdd).thenReturn(modelScores)
     when(validationScore.setName(Matchers.any())).thenReturn(validationScore)
     when(validationScore.persistRDD(Matchers.any())).thenReturn(validationScore)
     when(validationScore.materialize()).thenReturn(validationScore)

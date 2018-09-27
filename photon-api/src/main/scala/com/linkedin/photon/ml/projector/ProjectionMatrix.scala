@@ -110,16 +110,29 @@ object ProjectionMatrix {
     val std = projectedSpaceDimension
 
     val matrix = if (isKeepingInterceptTerm) {
-      Matrix.tabulate[Double](projectedSpaceDimension + 1, originalSpaceDimension){(row, col) =>
+      Matrix.tabulate[Double](projectedSpaceDimension + 1, originalSpaceDimension) { (row, col) =>
         if (row < projectedSpaceDimension) {
           val rv = random.nextGaussian() / std
-          if (rv > 1.0) 1.0 else if (rv < -1.0) -1.0 else rv
+
+          if (rv > 1.0) {
+            1.0
+          } else if (rv < -1.0) {
+            -1.0
+          } else {
+            rv
+          }
+
         } else {
-          if (col == originalSpaceDimension - 1) 1.0 else 0.0
+          if (col == originalSpaceDimension - 1) {
+            1.0
+          } else {
+            0.0
+          }
         }
       }
+
     } else {
-      Matrix.tabulate[Double](projectedSpaceDimension, originalSpaceDimension)((_, _) => random.nextGaussian() / std)
+      Matrix.tabulate[Double](projectedSpaceDimension, originalSpaceDimension)( (_, _) => random.nextGaussian() / std)
     }
 
     new ProjectionMatrix(matrix)

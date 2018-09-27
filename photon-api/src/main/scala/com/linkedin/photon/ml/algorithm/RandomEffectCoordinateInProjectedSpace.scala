@@ -26,13 +26,13 @@ import com.linkedin.photon.ml.supervised.model.GeneralizedLinearModel
  * The optimization problem coordinate for a random effect model in projected space.
  *
  * @tparam Objective The type of objective function used to solve individual random effect optimization problems
- * @param datasetInProjectedSpace The training dataset
+ * @param dataset The training datasset
  * @param optimizationProblem The fixed effect optimization problem
  */
 protected[ml] class RandomEffectCoordinateInProjectedSpace[Objective <: SingleNodeObjectiveFunction](
-    datasetInProjectedSpace: RandomEffectDatasetInProjectedSpace,
-    optimizationProblem: RandomEffectOptimizationProblem[Objective])
-  extends RandomEffectCoordinate[Objective](datasetInProjectedSpace, optimizationProblem) {
+    override protected val dataset: RandomEffectDatasetInProjectedSpace,
+    override protected val optimizationProblem: RandomEffectOptimizationProblem[Objective])
+  extends RandomEffectCoordinate[Objective](dataset, optimizationProblem) {
 
   /**
    * Score the effect-specific dataset in the coordinate with the input model.

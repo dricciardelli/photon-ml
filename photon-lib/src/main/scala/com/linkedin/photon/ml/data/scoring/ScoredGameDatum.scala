@@ -14,8 +14,6 @@
  */
 package com.linkedin.photon.ml.data.scoring
 
-import scala.collection.Map
-
 import com.linkedin.photon.ml.data.LabeledPoint
 import com.linkedin.photon.ml.util.MathUtils.isAlmostZero
 

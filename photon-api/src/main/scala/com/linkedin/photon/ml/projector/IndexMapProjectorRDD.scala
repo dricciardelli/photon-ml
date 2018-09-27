@@ -15,68 +15,66 @@
 package com.linkedin.photon.ml.projector
 
 import org.apache.spark.SparkContext
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
 import com.linkedin.photon.ml.Types.REId
-import com.linkedin.photon.ml.data.{LabeledPoint, RandomEffectDataset}
+import com.linkedin.photon.ml.data.LabeledPoint
+import com.linkedin.photon.ml.data.RandomEffectDataset.{ActiveData, PassiveData}
 import com.linkedin.photon.ml.model.Coefficients
 import com.linkedin.photon.ml.normalization.NormalizationContext
 import com.linkedin.photon.ml.spark.RDDLike
 import com.linkedin.photon.ml.supervised.model.GeneralizedLinearModel
-import com.linkedin.photon.ml.util.VectorUtils
+
+// TODO - Documentation
 
 /**
- * A class that holds the projectors for a sharded dataset.
  *
  * @param indexMapProjectorRDD The projectors
  */
-protected[ml] class IndexMapProjectorRDD private (indexMapProjectorRDD: RDD[(String, IndexMapProjector)])
+protected[ml] class IndexMapProjectorRDD private (indexMapProjectorRDD: RDD[(REId, IndexMapProjector)])
   extends RandomEffectProjector
   with RDDLike {
 
   /**
-   * Project the dataset from the original space to the projected space.
+   * Project the active data set from the original space to the projected space.
    *
-   * @param randomEffectDataset The input dataset in the original space
-   * @return The same dataset in the projected space
+   * @param activeData
+   * @return The same active data set in the projected space
    */
-  override def projectRandomEffectDataset(randomEffectDataset: RandomEffectDataset): RandomEffectDataset = {
+  override def projectActiveData(activeData: ActiveData): ActiveData =
+    activeData
+      // Make sure the activeData retains its partitioner, especially when the partitioner of featureMaps is
+      // not the same as that of activeData
+      .join(indexMapProjectorRDD, activeData.partitioner.get)
+      .mapValues { case (localDataset, projector) => localDataset.projectFeatures(projector) }
 
-    val activeData = randomEffectDataset.activeData
-    val passiveDataOption = randomEffectDataset.passiveDataOption
-    val passiveDataRandomEffectIdsOption = randomEffectDataset.passiveDataRandomEffectIdsOption
-    val projectedActiveData =
-      activeData
-        // Make sure the activeData retains its partitioner, especially when the partitioner of featureMaps is
-        // not the same as that of activeData
-        .join(indexMapProjectorRDD, activeData.partitioner.get)
-        .mapValues { case (localDataset, projector) => localDataset.projectFeatures(projector) }
+  /**
+   * Project the passive data set from the original space to the projected space.
+   *
+   * @param passiveData
+   * @param passiveDataIds
+   * @return The same passive data set in the projected space
+   */
+  override def projectPassiveData(passiveData: PassiveData, passiveDataIds: Broadcast[Set[REId]]): PassiveData = {
 
-    val projectedPassiveData =
-      if (passiveDataOption.isDefined) {
-        val passiveDataRandomEffectIds = passiveDataRandomEffectIdsOption.get
-        val projectorsForPassiveData = indexMapProjectorRDD.filter { case (randomEffectId, _) =>
-          passiveDataRandomEffectIds.value.contains(randomEffectId)
-        }.collectAsMap()
-
-        val projectorsForPassiveDataBroadcast = passiveDataOption.get.sparkContext.broadcast(projectorsForPassiveData)
-        val result = passiveDataOption.map {
-          _.mapValues { case (shardId, LabeledPoint(response, features, offset, weight)) =>
-            val projector = projectorsForPassiveDataBroadcast.value(shardId)
-            val projectedFeatures = projector.projectFeatures(features)
-
-            (shardId, LabeledPoint(response, projectedFeatures, offset, weight))
-          }
-        }
-
-        projectorsForPassiveDataBroadcast.unpersist()
-        result
-      } else {
-        None
+    val passiveDataProjectors = indexMapProjectorRDD
+      .filter { case (randomEffectId, _) =>
+        passiveDataIds.value.contains(randomEffectId)
       }
+      .collectAsMap()
 
-    randomEffectDataset.update(projectedActiveData, projectedPassiveData)
+    val passiveDataProjectorsBroadcast = passiveData.sparkContext.broadcast(passiveDataProjectors)
+    val result = passiveData.mapValues { case (shardId, LabeledPoint(response, features, offset, weight)) =>
+      val projector = passiveDataProjectorsBroadcast.value(shardId)
+
+      (shardId, LabeledPoint(response, projector.projectFeatures(features), offset, weight))
+    }
+
+    passiveDataProjectorsBroadcast.unpersist()
+
+    result
   }
 
   /**
@@ -87,7 +85,7 @@ protected[ml] class IndexMapProjectorRDD private (indexMapProjectorRDD: RDD[(Str
    * @return The [[RDD]] of [[GeneralizedLinearModel]] with [[Coefficients]] in the original space
    */
   override def projectCoefficientsRDD(
-      modelsRDD: RDD[(String, GeneralizedLinearModel)]): RDD[(String, GeneralizedLinearModel)] =
+      modelsRDD: RDD[(REId, GeneralizedLinearModel)]): RDD[(REId, GeneralizedLinearModel)] =
 
     // Left join the models to projectors for cases where we have a prior model but no new data (and hence no
     // projectors)
@@ -111,7 +109,7 @@ protected[ml] class IndexMapProjectorRDD private (indexMapProjectorRDD: RDD[(Str
    * @return The [[RDD]] of [[GeneralizedLinearModel]] with [[Coefficients]] in the projected space
    */
   override def transformCoefficientsRDD(
-      modelsRDD: RDD[(String, GeneralizedLinearModel)]): RDD[(String, GeneralizedLinearModel)] =
+      modelsRDD: RDD[(REId, GeneralizedLinearModel)]): RDD[(REId, GeneralizedLinearModel)] =
 
     // Left join the models to projectors for cases where we have a prior model but no new data (and hence no
     // projectors)
@@ -216,42 +214,11 @@ object IndexMapProjectorRDD {
   /**
    * Generate index map based RDD projectors.
    *
-   * @param randomEffectDataset The input random effect dataset
+   * @param indices
+   * @param originalSpaceDimension
    * @return The generated index map based RDD projectors
    */
-  protected[ml] def buildIndexMapProjector(randomEffectDataset: RandomEffectDataset): IndexMapProjectorRDD = {
-
-    val originalSpaceDimension = randomEffectDataset
-      .activeData
-      .map { case (_, ds) => ds.dataPoints.head._2.features.length }
-      .take(1)(0)
-
-    // Collect active indices for the active dataset
-    val activeIndices = randomEffectDataset
-      .activeData
-      .mapValues { ds =>
-        ds.dataPoints.map(_._2.features).flatMap(VectorUtils.getActiveIndices).toSet
-      }
-
-    // Collect active indices for the passive dataset
-    val passiveIndicesOption = randomEffectDataset
-      .passiveDataOption
-      .map { passiveData =>
-        passiveData
-          .map {
-            case (_, (reId, labeledPoint)) => (reId, labeledPoint.features)
-          }
-          .mapValues(VectorUtils.getActiveIndices)
-      }
-
-    // Union them, and fold the results into (reId, indices) tuples
-    val indices = passiveIndicesOption
-      .map { passiveIndices =>
-        activeIndices
-          .union(passiveIndices)
-          .foldByKey(Set.empty[Int])(_ ++ _)
-      }
-      .getOrElse(activeIndices)
+  protected[ml] def apply(indices: RDD[(REId, Set[Int])], originalSpaceDimension: Int): IndexMapProjectorRDD = {
 
     val indexMapProjectors = indices.mapValues { indexSet =>
       new IndexMapProjector(indexSet.zipWithIndex.toMap, originalSpaceDimension, indexSet.size)

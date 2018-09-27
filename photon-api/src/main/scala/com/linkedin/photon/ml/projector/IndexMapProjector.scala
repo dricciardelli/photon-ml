@@ -14,8 +14,6 @@
  */
 package com.linkedin.photon.ml.projector
 
-import scala.collection.Map
-
 import breeze.linalg.Vector
 
 import com.linkedin.photon.ml.util.VectorUtils
@@ -46,10 +44,11 @@ protected[ml] class IndexMapProjector (
 
   val projectedToOriginalSpaceMap: Map[Int, Int] = originalToProjectedSpaceMap.map(_.swap)
 
-  assert(originalToProjectedSpaceMap.size == projectedToOriginalSpaceMap.size, s"The size of " +
-      s"originalToProjectedSpaceMap (${originalToProjectedSpaceMap.size}) and the size of " +
-      s"projectedToOriginalSpaceMap (${projectedToOriginalSpaceMap.size}) are expected to be equal, " +
-      s"e.g., there should exist a one-to-one correspondence between the indices in the original and projected space.")
+  require(
+    originalToProjectedSpaceMap.size == projectedToOriginalSpaceMap.size,
+    s"The projected space should correspond 1-to-1 to the original space:\n" +
+      s"original feature space size = ${originalToProjectedSpaceMap.size}\n" +
+      s"projected feature space size = ${projectedToOriginalSpaceMap.size}")
 
   /**
    * Project features into the new space.
@@ -57,9 +56,8 @@ protected[ml] class IndexMapProjector (
    * @param features The features
    * @return Projected features
    */
-  override def projectFeatures(features: Vector[Double]): Vector[Double] = {
+  override def projectFeatures(features: Vector[Double]): Vector[Double] =
     IndexMapProjector.projectWithMap(features, originalToProjectedSpaceMap, projectedSpaceDimension)
-  }
 
   /**
    * Project coefficients into the new space.
@@ -67,9 +65,8 @@ protected[ml] class IndexMapProjector (
    * @param coefficients The coefficients
    * @return Projected coefficients
    */
-  override def projectCoefficients(coefficients: Vector[Double]): Vector[Double] = {
+  override def projectCoefficients(coefficients: Vector[Double]): Vector[Double] =
     IndexMapProjector.projectWithMap(coefficients, projectedToOriginalSpaceMap, originalSpaceDimension)
-  }
 }
 
 object IndexMapProjector {
@@ -83,7 +80,9 @@ object IndexMapProjector {
    * @return The output vector in the projected space
    */
   private def projectWithMap(vector: Vector[Double], map: Map[Int, Int], dimension: Int): Vector[Double] = {
-    val indexAndData = vector.activeIterator
+
+    val indexAndData = vector
+      .activeIterator
       .filter { case (key, _) => map.contains(key) }
       .map { case (key, value) => (map(key), value) }.toArray
 

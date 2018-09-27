@@ -29,6 +29,9 @@ class FixedEffectCoordinateIntegTest extends SparkTestUtils with GameTestUtils {
 
   private val featureShardId = "shard1"
 
+  /**
+   *
+   */
   @Test
   def testUpdateModel(): Unit = sparkTest("testUpdateModel") {
     val (coordinate, model) = generateFixedEffectCoordinateAndModel(
@@ -38,7 +41,7 @@ class FixedEffectCoordinateIntegTest extends SparkTestUtils with GameTestUtils {
 
     // Score before model update
     val score = coordinate.score(model)
-    assertTrue(score.scores.map(_._2).collect.forall(MathUtils.isAlmostZero))
+    assertTrue(score.scoresRdd.map(_._2).collect.forall(MathUtils.isAlmostZero))
 
     // Update model
     val (newModel, _) = coordinate.updateModel(model)
@@ -46,9 +49,12 @@ class FixedEffectCoordinateIntegTest extends SparkTestUtils with GameTestUtils {
 
     // Score after model update
     val newScore = coordinate.score(newModel)
-    assertFalse(newScore.scores.map(_._2).collect.forall(MathUtils.isAlmostZero))
+    assertFalse(newScore.scoresRdd.map(_._2).collect.forall(MathUtils.isAlmostZero))
   }
 
+  /**
+   *
+   */
   @Test
   def testScore(): Unit = sparkTest("testScore") {
     val (coordinate, model) = generateFixedEffectCoordinateAndModel(
@@ -57,8 +63,8 @@ class FixedEffectCoordinateIntegTest extends SparkTestUtils with GameTestUtils {
       DIMENSIONALITY)
 
     val score = coordinate.score(model)
-    assertEquals(score.scores.count, NUM_TRAINING_SAMPLES)
-    assertTrue(score.scores.map(_._2).collect.forall(MathUtils.isAlmostZero))
+    assertEquals(score.scoresRdd.count, NUM_TRAINING_SAMPLES)
+    assertTrue(score.scoresRdd.map(_._2).collect.forall(MathUtils.isAlmostZero))
   }
 }
 

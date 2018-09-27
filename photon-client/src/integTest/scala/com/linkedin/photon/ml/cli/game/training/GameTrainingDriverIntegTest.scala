@@ -28,7 +28,7 @@ import org.testng.annotations.{DataProvider, Test}
 
 import com.linkedin.photon.avro.generated.BayesianLinearModelAvro
 import com.linkedin.photon.ml.Types.UniqueSampleId
-import com.linkedin.photon.ml.{DataValidationType, HyperparameterTunerName, HyperparameterTuningMode, TaskType}
+import com.linkedin.photon.ml.{DataValidationType, TaskType}
 import com.linkedin.photon.ml.cli.game.GameDriver
 import com.linkedin.photon.ml.constants.MathConst
 import com.linkedin.photon.ml.data.{FixedEffectDataConfiguration, GameConverters, RandomEffectDataConfiguration}
@@ -360,7 +360,7 @@ class GameTrainingDriverIntegTest extends SparkTestUtils with GameTestUtils with
    * photon-ml. Hyperparameter tuning is still available in LinkedIn internal library li-photon-ml.)
    */
 //  @Test
-//  def c(): Unit = sparkTest("testHyperParameterTuning", useKryo = true) {
+//  def testHyperParameterTuning(): Unit = sparkTest("testHyperParameterTuning", useKryo = true) {
 //
 //    val hyperParameterTuningIter = 1
 //    val outputDir = new Path(getTmpDir, "hyperParameterTuning")
@@ -646,8 +646,8 @@ class GameTrainingDriverIntegTest extends SparkTestUtils with GameTestUtils with
       StorageLevel.DISK_ONLY,
       indexMapLoaders)
 
-    val scores1 = gameModel1.scoreForCoordinateDescent(gameDataset).scores
-    val scores2 = gameModel2.scoreForCoordinateDescent(gameDataset).scores
+    val scores1 = gameModel1.scoreForCoordinateDescent(gameDataset).scoresRdd
+    val scores2 = gameModel2.scoreForCoordinateDescent(gameDataset).scoresRdd
 
     val rmse1 = RMSEEvaluator.evaluate(prepareEvaluationData(validatingLabelsAndOffsetsAndWeights, scores1))
     val rmse2 = RMSEEvaluator.evaluate(prepareEvaluationData(validatingLabelsAndOffsetsAndWeights, scores2))
@@ -692,7 +692,7 @@ class GameTrainingDriverIntegTest extends SparkTestUtils with GameTestUtils with
       StorageLevel.DISK_ONLY,
       indexMapLoaders)
 
-    val scores = gameModel.scoreForCoordinateDescent(gameDataset).scores
+    val scores = gameModel.scoreForCoordinateDescent(gameDataset).scoresRdd
 
     RMSEEvaluator.evaluate(prepareEvaluationData(validatingLabelsAndOffsetsAndWeights, scores))
   }

@@ -45,7 +45,7 @@ class RandomEffectCoordinateIntegTest extends SparkTestUtils with GameTestUtils 
 
     // Score before model update
     val score = coordinate.score(model)
-    assertTrue(score.scores.map(_._2).collect.forall(MathUtils.isAlmostZero))
+    assertTrue(score.scoresRdd.map(_._2).collect.forall(MathUtils.isAlmostZero))
 
     // Update model
     val (newModel, _) = coordinate.updateModel(model)
@@ -53,7 +53,7 @@ class RandomEffectCoordinateIntegTest extends SparkTestUtils with GameTestUtils 
 
     // Score after model update
     val newScore = coordinate.score(newModel)
-    assertFalse(newScore.scores.map(_._2).collect.forall(MathUtils.isAlmostZero))
+    assertFalse(newScore.scoresRdd.map(_._2).collect.forall(MathUtils.isAlmostZero))
   }
 
   @Test(dataProvider = "numEntitiesDataProvider")
@@ -93,8 +93,8 @@ class RandomEffectCoordinateIntegTest extends SparkTestUtils with GameTestUtils 
 
     val score = coordinate.score(model)
 
-    assertEquals(score.scores.count, numEntities * NUM_TRAINING_SAMPLES)
-    assertTrue(score.scores.map(_._2).collect.forall(MathUtils.isAlmostZero))
+    assertEquals(score.scoresRdd.count, numEntities * NUM_TRAINING_SAMPLES)
+    assertTrue(score.scoresRdd.map(_._2).collect.forall(MathUtils.isAlmostZero))
   }
 }
 

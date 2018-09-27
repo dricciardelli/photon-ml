@@ -273,7 +273,7 @@ class CoordinateDescent(
                   validationScoresContainerOption = Some(updatedValidatingScoresContainer)
 
                   Timed(s"Compute validation metrics") {
-                    val results = evaluationSuite.evaluate(fullValidationScore.scores)
+                    val results = evaluationSuite.evaluate(fullValidationScore.scoresRdd)
 
                     results
                       .evaluations

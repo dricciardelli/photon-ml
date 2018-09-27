@@ -37,8 +37,8 @@ class FixedEffectModelCoordinateIntegTest extends SparkTestUtils with GameTestUt
       DIMENSIONALITY)
 
     val score = coordinate.score(model)
-    assertEquals(score.scores.count, NUM_TRAINING_SAMPLES)
-    assertTrue(score.scores.map(_._2).collect.forall(MathUtils.isAlmostZero))
+    assertEquals(score.scoresRdd.count, NUM_TRAINING_SAMPLES)
+    assertTrue(score.scoresRdd.map(_._2).collect.forall(MathUtils.isAlmostZero))
   }
 }
 

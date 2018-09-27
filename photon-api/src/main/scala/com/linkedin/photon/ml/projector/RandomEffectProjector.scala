@@ -14,11 +14,15 @@
  */
 package com.linkedin.photon.ml.projector
 
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 
-import com.linkedin.photon.ml.data.RandomEffectDataset
+import com.linkedin.photon.ml.Types.REId
+import com.linkedin.photon.ml.data.RandomEffectDataset.{ActiveData, PassiveData}
 import com.linkedin.photon.ml.model.Coefficients
 import com.linkedin.photon.ml.supervised.model.GeneralizedLinearModel
+
+// TODO - Documentation
 
 /**
  * A trait that performs two types of projections:
@@ -36,12 +40,21 @@ import com.linkedin.photon.ml.supervised.model.GeneralizedLinearModel
 protected[ml] trait RandomEffectProjector {
 
   /**
-   * Project the dataset from the original space to the projected space.
+   * Project the active dataset from the original space to the projected space.
    *
-   * @param randomEffectDataset The input dataset in the original space
-   * @return The same dataset in the projected space
+   * @param activeData
+   * @return The same active dataset in the projected space
    */
-  def projectRandomEffectDataset(randomEffectDataset: RandomEffectDataset): RandomEffectDataset
+  def projectActiveData(activeData: ActiveData): ActiveData
+
+  /**
+   * Project the passive dataset from the original space to the projected space.
+   *
+   * @param passiveData
+   * @param passiveDataIds
+   * @return The same passive dataset in the projected space
+   */
+  def projectPassiveData(passiveData: PassiveData, passiveDataIds: Broadcast[Set[REId]]): PassiveData
 
   /**
    * Project a [[RDD]] of [[GeneralizedLinearModel]] [[Coefficients]] from the projected space back to the original
@@ -50,7 +63,7 @@ protected[ml] trait RandomEffectProjector {
    * @param modelsRDD The input [[RDD]] of [[GeneralizedLinearModel]] with [[Coefficients]] in the projected space
    * @return The [[RDD]] of [[GeneralizedLinearModel]] with [[Coefficients]] in the original space
    */
-  def projectCoefficientsRDD(modelsRDD: RDD[(String, GeneralizedLinearModel)]): RDD[(String, GeneralizedLinearModel)]
+  def projectCoefficientsRDD(modelsRDD: RDD[(REId, GeneralizedLinearModel)]): RDD[(REId, GeneralizedLinearModel)]
 
   /**
    * Project a [[RDD]] of [[GeneralizedLinearModel]] [[Coefficients]] from the original space to the projected space.
@@ -58,35 +71,6 @@ protected[ml] trait RandomEffectProjector {
    * @param modelsRDD The input [[RDD]] of [[GeneralizedLinearModel]] with [[Coefficients]] in the original space
    * @return The [[RDD]] of [[GeneralizedLinearModel]] with [[Coefficients]] in the projected space
    */
-  def transformCoefficientsRDD(modelsRDD: RDD[(String, GeneralizedLinearModel)]): RDD[(String, GeneralizedLinearModel)]
+  def transformCoefficientsRDD(modelsRDD: RDD[(REId, GeneralizedLinearModel)]): RDD[(REId, GeneralizedLinearModel)]
 
-}
-
-object RandomEffectProjector {
-
-  /**
-   * Builds a random effect projector instance.
-   *
-   * @param randomEffectDataset The dataset to project
-   * @param projectorType The type of the projector
-   * @return A new [[RandomEffectProjector]]
-   */
-  protected[ml] def build(
-      randomEffectDataset: RandomEffectDataset,
-      projectorType: ProjectorType): RandomEffectProjector = projectorType match {
-
-    case RandomProjection(projectedSpaceDimension) =>
-      ProjectionMatrixBroadcast.buildRandomProjectionBroadcastProjector(
-        randomEffectDataset, projectedSpaceDimension, isKeepingInterceptTerm = true)
-
-    case IdentityProjection =>
-      new IdentityProjector
-
-    case IndexMapProjection =>
-      IndexMapProjectorRDD.buildIndexMapProjector(randomEffectDataset)
-
-    case _ =>
-      throw new UnsupportedOperationException(
-        s"Projector type $projectorType for random effect dataset is not supported")
-  }
 }

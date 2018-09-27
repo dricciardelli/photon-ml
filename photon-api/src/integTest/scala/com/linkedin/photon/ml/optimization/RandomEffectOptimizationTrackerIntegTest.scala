@@ -14,8 +14,6 @@
  */
 package com.linkedin.photon.ml.optimization
 
-import scala.collection.Map
-
 import breeze.linalg.Vector
 import org.testng.Assert.assertEquals
 import org.testng.annotations.Test

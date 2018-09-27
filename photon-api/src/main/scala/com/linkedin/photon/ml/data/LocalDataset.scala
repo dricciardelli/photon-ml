@@ -110,7 +110,6 @@ protected[ml] case class LocalDataset(dataPoints: Array[(UniqueSampleId, Labeled
    */
   def filterFeaturesByPearsonCorrelationScore(numFeaturesToKeep: Int): LocalDataset =
     if (numFeaturesToKeep < numActiveFeatures) {
-
       val labelAndFeatures = dataPoints.map { case (_, labeledPoint) => (labeledPoint.label, labeledPoint.features) }
       val pearsonScores = LocalDataset.computePearsonCorrelationScore(labelAndFeatures)
 

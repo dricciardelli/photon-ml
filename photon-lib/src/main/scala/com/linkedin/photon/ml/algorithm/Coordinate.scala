@@ -26,6 +26,7 @@ import com.linkedin.photon.ml.optimization.OptimizationTracker
  * @param dataset The training dataset
  */
 protected[ml] abstract class Coordinate[D <: Dataset[D]](dataset: D) {
+
   /**
    * Score the effect-specific dataset in the coordinate with the input model.
    *
