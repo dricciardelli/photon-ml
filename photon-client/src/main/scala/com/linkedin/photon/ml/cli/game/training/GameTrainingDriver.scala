@@ -43,7 +43,6 @@ import com.linkedin.photon.ml.normalization.{NormalizationContext, Normalization
 import com.linkedin.photon.ml.optimization.game.CoordinateOptimizationConfiguration
 import com.linkedin.photon.ml.projector.IdentityProjection
 import com.linkedin.photon.ml.stat.BasicStatisticalSummary
-import com.linkedin.photon.ml.util.Implicits._
 import com.linkedin.photon.ml.util.Utils
 import com.linkedin.photon.ml.util._
 
@@ -418,12 +417,12 @@ object GameTrainingDriver extends GameDriver {
       }
     }
 
-    val featureShardStatsOpt = Timed("Calculate statistics for each feature shard") {
+    val featureShardStats = Timed("Calculate statistics for each feature shard") {
       calculateAndSaveFeatureShardStats(trainingData, featureIndexMapLoaders)
     }
 
     val normalizationContexts = Timed("Prepare normalization contexts") {
-      prepareNormalizationContexts(trainingData, featureIndexMapLoaders, featureShardStatsOpt)
+      prepareNormalizationContexts(trainingData, featureIndexMapLoaders, featureShardStats)
     }
 
     val gameOptimizationConfigs = Timed("Prepare optimization configuration(s)") {
@@ -444,12 +443,9 @@ object GameTrainingDriver extends GameDriver {
         .setComputeVariance(getOrDefault(computeVariance))
         .setIgnoreThresholdForNewModels(getOrDefault(ignoreThresholdForNewModels))
 
-      //TODO: the tasks using random effect feature selection will need to be controlled by parameter
+      // TODO: The tasks using random effect feature selection will need to be controlled by parameter
       if (getRequiredParam(trainingTask) == TaskType.LOGISTIC_REGRESSION) {
-        featureShardStatsOpt match {
-          case Some(featureShardStats) => estimator.setFeatureShardStatistics(featureShardStats)
-          case _ =>
-        }
+        estimator.setFeatureShardStatistics(featureShardStats)
       }
 
       get(inputColumnNames).foreach(estimator.setInputColumnNames)
@@ -555,11 +551,10 @@ object GameTrainingDriver extends GameDriver {
   private def prepareNormalizationContexts(
       trainingData: DataFrame,
       featureIndexMapLoaders: Map[FeatureShardId, IndexMapLoader],
-      statistics: Option[Map[FeatureShardId, BasicStatisticalSummary]]): Option[Map[CoordinateId, NormalizationContext]] =
+      statistics: Map[FeatureShardId, BasicStatisticalSummary]): Option[Map[CoordinateId, NormalizationContext]] =
 
     Utils.filter(getOrDefault(normalization) != NormalizationType.NONE) {
       val featureShardToNormalizationContextMap = statistics
-        .getOrElse(calculateStatistics(trainingData, featureIndexMapLoaders))
         .map { case (featureShardId, featureShardStats) =>
           (featureShardId, NormalizationContext(getOrDefault(normalization), featureShardStats))
         }
@@ -579,16 +574,21 @@ object GameTrainingDriver extends GameDriver {
    */
   private def calculateAndSaveFeatureShardStats(
       trainingData: DataFrame,
-      featureIndexMapLoaders: Map[FeatureShardId, IndexMapLoader]): Option[Map[FeatureShardId, BasicStatisticalSummary]] =
-    get(dataSummaryDirectory).map { summarizationOutputDir: Path =>
-      calculateStatistics(trainingData, featureIndexMapLoaders)
-        .tap { case (featureShardId, featureShardStats) =>
-          val outputPath = new Path(summarizationOutputDir, featureShardId)
-          val indexMap = featureIndexMapLoaders(featureShardId).indexMapForDriver()
+      featureIndexMapLoaders: Map[FeatureShardId, IndexMapLoader]): Map[FeatureShardId, BasicStatisticalSummary] = {
 
-          ModelProcessingUtils.writeBasicStatistics(sc, featureShardStats, outputPath, indexMap)
-        }
+    val featuresSummary = calculateStatistics(trainingData, featureIndexMapLoaders)
+
+    get(dataSummaryDirectory).foreach { summarizationOutputDir: Path =>
+      featuresSummary.foreach { case (featureShardId, featureShardStats) =>
+        val outputPath = new Path(summarizationOutputDir, featureShardId)
+        val indexMap = featureIndexMapLoaders(featureShardId).indexMapForDriver()
+
+        ModelProcessingUtils.writeBasicStatistics(sc, featureShardStats, outputPath, indexMap)
       }
+    }
+
+    featuresSummary
+  }
 
   /**
    * Calculate basic statistics (same as spark-ml) on a DataFrame.

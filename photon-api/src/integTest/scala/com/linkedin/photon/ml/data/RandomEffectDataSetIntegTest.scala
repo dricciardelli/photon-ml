@@ -108,26 +108,26 @@ class RandomEffectDataSetIntegTest extends SparkTestUtils {
    * @param activeDataLowerBound Threshold for active data
    * @param expectedUniqueRandomEffects Expected number of random effects which have data exceeding the threshold
    */
-  @Test(dataProvider = "rawDataProvider")
-  def testActiveDataLowerBound(
-      data: Seq[(UniqueSampleId, GameDatum)],
-      partitionMap: Map[REId, Int],
-      activeDataLowerBound: Int,
-      expectedUniqueRandomEffects: Long): Unit = sparkTest("testActiveDataLowerBound") {
-
-    val rdd = sc.parallelize(data, NUM_PARTITIONS).partitionBy(new LongHashPartitioner(NUM_PARTITIONS))
-    val randomEffectDataConfig = RandomEffectDataConfiguration(
-      RANDOM_EFFECT_TYPE,
-      FEATURE_SHARD_NAME,
-      NUM_PARTITIONS,
-      Some(activeDataLowerBound))
-    val partitioner = new RandomEffectDataSetPartitioner(NUM_PARTITIONS, sc.broadcast(partitionMap))
-
-    val randomEffectDataSet = RandomEffectDataSet(rdd, randomEffectDataConfig, partitioner, None, None)
-    val numUniqueRandomEffects = randomEffectDataSet.activeData.keys.count()
-
-    assertEquals(numUniqueRandomEffects, expectedUniqueRandomEffects)
-  }
+//  @Test(dataProvider = "rawDataProvider")
+//  def testActiveDataLowerBound(
+//      data: Seq[(UniqueSampleId, GameDatum)],
+//      partitionMap: Map[REId, Int],
+//      activeDataLowerBound: Int,
+//      expectedUniqueRandomEffects: Long): Unit = sparkTest("testActiveDataLowerBound") {
+//
+//    val rdd = sc.parallelize(data, NUM_PARTITIONS).partitionBy(new LongHashPartitioner(NUM_PARTITIONS))
+//    val randomEffectDataConfig = RandomEffectDataConfiguration(
+//      RANDOM_EFFECT_TYPE,
+//      FEATURE_SHARD_NAME,
+//      NUM_PARTITIONS,
+//      Some(activeDataLowerBound))
+//    val partitioner = new RandomEffectDataSetPartitioner(NUM_PARTITIONS, sc.broadcast(partitionMap))
+//
+//    val randomEffectDataSet = RandomEffectDataSet(rdd, randomEffectDataConfig, partitioner, None, None)
+//    val numUniqueRandomEffects = randomEffectDataSet.activeData.keys.count()
+//
+//    assertEquals(numUniqueRandomEffects, expectedUniqueRandomEffects)
+//  }
 
   /**
    * Test that the random effects with less data than the active data lower bound will be dropped.
@@ -137,29 +137,29 @@ class RandomEffectDataSetIntegTest extends SparkTestUtils {
    * @param activeDataLowerBound Threshold for active data
    * @param expectedUniqueRandomEffects Expected number of random effects which have data exceeding the threshold
    */
-  @Test(dataProvider = "rawDataProvider2")
-  def testIgnoreActiveDataLowerBound(
-      data: Seq[(UniqueSampleId, GameDatum)],
-      existingIds: Seq[REId],
-      partitionMap: Map[REId, Int],
-      activeDataLowerBound: Int,
-      expectedUniqueRandomEffects: Long): Unit = sparkTest("testActiveDataLowerBound") {
-
-    val rdd = sc.parallelize(data, NUM_PARTITIONS).partitionBy(new LongHashPartitioner(NUM_PARTITIONS))
-    val existingIdsRDD = sc.parallelize(existingIds, NUM_PARTITIONS)
-
-    val randomEffectDataConfig = RandomEffectDataConfiguration(
-      RANDOM_EFFECT_TYPE,
-      FEATURE_SHARD_NAME,
-      NUM_PARTITIONS,
-      Some(activeDataLowerBound))
-    val partitioner = new RandomEffectDataSetPartitioner(NUM_PARTITIONS, sc.broadcast(partitionMap))
-
-    val randomEffectDataSet = RandomEffectDataSet(rdd, randomEffectDataConfig, partitioner, Some(existingIdsRDD), None)
-    val numUniqueRandomEffects = randomEffectDataSet.activeData.keys.count()
-
-    assertEquals(numUniqueRandomEffects, expectedUniqueRandomEffects)
-  }
+//  @Test(dataProvider = "rawDataProvider2")
+//  def testIgnoreActiveDataLowerBound(
+//      data: Seq[(UniqueSampleId, GameDatum)],
+//      existingIds: Seq[REId],
+//      partitionMap: Map[REId, Int],
+//      activeDataLowerBound: Int,
+//      expectedUniqueRandomEffects: Long): Unit = sparkTest("testActiveDataLowerBound") {
+//
+//    val rdd = sc.parallelize(data, NUM_PARTITIONS).partitionBy(new LongHashPartitioner(NUM_PARTITIONS))
+//    val existingIdsRDD = sc.parallelize(existingIds, NUM_PARTITIONS)
+//
+//    val randomEffectDataConfig = RandomEffectDataConfiguration(
+//      RANDOM_EFFECT_TYPE,
+//      FEATURE_SHARD_NAME,
+//      NUM_PARTITIONS,
+//      Some(activeDataLowerBound))
+//    val partitioner = new RandomEffectDataSetPartitioner(NUM_PARTITIONS, sc.broadcast(partitionMap))
+//
+//    val randomEffectDataSet = RandomEffectDataSet(rdd, randomEffectDataConfig, partitioner, Some(existingIdsRDD), None)
+//    val numUniqueRandomEffects = randomEffectDataSet.activeData.keys.count()
+//
+//    assertEquals(numUniqueRandomEffects, expectedUniqueRandomEffects)
+//  }
 }
 
 object RandomEffectDataSetIntegTest {

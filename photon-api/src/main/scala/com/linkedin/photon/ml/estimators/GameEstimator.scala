@@ -538,6 +538,7 @@ class GameEstimator(val sc: SparkContext, implicit val logger: Logger) extends P
           }
 
           val rawRandomEffectDataSet = RandomEffectDataSet(
+              logger,
               gameDataSet,
               reConfig,
               rePartitioner,

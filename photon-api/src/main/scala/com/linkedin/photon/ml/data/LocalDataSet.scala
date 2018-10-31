@@ -21,7 +21,7 @@ import breeze.linalg.Vector
 import com.linkedin.photon.ml.Types.UniqueSampleId
 import com.linkedin.photon.ml.constants.MathConst
 import com.linkedin.photon.ml.projector.Projector
-import com.linkedin.photon.ml.util.VectorUtils
+import com.linkedin.photon.ml.util.{Logging, VectorUtils}
 
 /**
  * Local data set implementation.
@@ -32,7 +32,7 @@ import com.linkedin.photon.ml.util.VectorUtils
  *
  * @param dataPoints Local data points consists of (globalId, labeledPoint) pairs
  */
-protected[ml] case class LocalDataSet(dataPoints: Array[(UniqueSampleId, LabeledPoint)]) {
+protected[ml] case class LocalDataSet(dataPoints: Array[(UniqueSampleId, LabeledPoint)]) extends Logging {
 
   require(
     dataPoints.length > 0,
@@ -105,8 +105,8 @@ protected[ml] case class LocalDataSet(dataPoints: Array[(UniqueSampleId, Labeled
   /**
    * Filter features by binomial ratio confidence intervals.
    *
-   * @param globalFeatureInstances The global instances with the features present
-   * @param globalPositiveInstances The global positive instances with the features present
+   * @param globalFeatureInstances The number of global instances with the features present
+   * @param globalPositiveInstances The number of global positive instances with the features present
    * @param binaryIndices The binary feature columns indices
    * @param nonBinaryIndices The binary feature columns indices
    * @param intervalBound The lower bound threshold of the confidence interval used to filter features
@@ -121,13 +121,14 @@ protected[ml] case class LocalDataSet(dataPoints: Array[(UniqueSampleId, Labeled
       intervalBound: Double = 1.0,
       zScore: Double = 2.575): LocalDataSet = {
 
+    logger.warn("**** FILTERING FEATURES")
+
     val labelAndFeatures = dataPoints.map { case (_, labeledPoint) => (labeledPoint.label, labeledPoint.features) }
     val lowerBounds = LocalDataSet.computeRatioCILowerBound(
       labelAndFeatures,
       globalFeatureInstances,
       globalPositiveInstances,
       binaryIndices,
-      numFeatures,
       zScore)
     val filteredBinaryFeaturesIndexSet = lowerBounds.filter(_._2 > intervalBound).keySet
     val filteredFeaturesIndexSet = filteredBinaryFeaturesIndexSet ++ nonBinaryIndices
@@ -176,6 +177,9 @@ protected[ml] case class LocalDataSet(dataPoints: Array[(UniqueSampleId, Labeled
 }
 
 object LocalDataSet {
+
+  val EPSILON = 0.5
+
   /**
    * Factory method for LocalDataSet.
    *
@@ -183,8 +187,6 @@ object LocalDataSet {
    * @param isSortedByFirstIndex Whether or not to sort the data by global ID
    * @return A new LocalDataSet
    */
-  val EPSILON = 0.5
-
   protected[ml] def apply(
       dataPoints: Array[(UniqueSampleId, LabeledPoint)],
       isSortedByFirstIndex: Boolean): LocalDataSet = {
@@ -222,11 +224,10 @@ object LocalDataSet {
    * Compute feature ratio confidence interval lower bounds.
    *
    * @param labelAndFeatures An [[Array]] of (label, feature vector) tuples
-   * @param zScore The Z-score for the chosen two-tailed confidence level
-   * @param globalFeatureInstances The global instances with the features present
-   * @param globalPositiveInstances The global positive instances with the features present
+   * @param globalFeatureInstances The number of global instances with the features present
+   * @param globalPositiveInstances The number of global positive instances with the features present
    * @param binaryIndices The binary feature columns indices
-   * @param epsilon The constant used to compute for extreme case of ratio modeling
+   * @param zScore The Z-score for the chosen two-tailed confidence level
    * @return the lowerBounds for feature columns
    */
   protected[ml] def computeRatioCILowerBound(
@@ -234,17 +235,13 @@ object LocalDataSet {
       globalFeatureInstances: Array[Double],
       globalPositiveInstances: Array[Double],
       binaryIndices: Set[Int],
-      numFeatures: Int,
       zScore: Double): Map[Int, Double] = {
 
     val n = globalFeatureInstances
     val y = globalPositiveInstances
 
     val m = labelAndFeatures.map(_._2).reduce(_ + _)
-    val x = labelAndFeatures
-      .filter(_._1 > MathConst.POSITIVE_RESPONSE_THRESHOLD)
-      .map(_._2)
-      .foldLeft(Vector.zeros[Double](numFeatures))(_ + _)
+    val x = labelAndFeatures.filter(_._1 > MathConst.POSITIVE_RESPONSE_THRESHOLD).map(_._2).reduce(_ + _)
 
     binaryIndices
       .map { key =>

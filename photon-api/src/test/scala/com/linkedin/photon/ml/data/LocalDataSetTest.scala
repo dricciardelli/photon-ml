@@ -334,7 +334,6 @@ class LocalDataSetTest {
       globalFeatureInstances,
       globalPositiveInstances,
       binaryIndices,
-      features(0).size,
       2.575)
 
     computed.foreach { case (key, value) =>
