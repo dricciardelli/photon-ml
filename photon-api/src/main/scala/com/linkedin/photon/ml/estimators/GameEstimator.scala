@@ -467,7 +467,7 @@ class GameEstimator(val sc: SparkContext, implicit val logger: Logger) extends P
           getOrDefault(inputColumnNames))
         .partitionBy(gameDataPartitioner)
         .setName("GAME training data")
-        .persist(StorageLevel.DISK_ONLY)
+        .persist(StorageLevel.DISK_ONLY_2)
     }
 
     getRequiredParam(coordinateDataConfigurations).map { case (coordinateId, config) =>
@@ -508,7 +508,7 @@ class GameEstimator(val sc: SparkContext, implicit val logger: Logger) extends P
 
           val rawRandomEffectDataset = RandomEffectDataset(gameDataset, reConfig, rePartitioner, existingModelKeysRddOpt)
             .setName(s"Random Effect Dataset: $coordinateId")
-            .persistRDD(StorageLevel.DISK_ONLY)
+            .persistRDD(StorageLevel.DISK_ONLY_2)
             .materialize()
           val projectorType = reConfig.projectorType
           val randomEffectDataset = projectorType match {
@@ -520,7 +520,7 @@ class GameEstimator(val sc: SparkContext, implicit val logger: Logger) extends P
               val randomEffectDatasetInProjectedSpace = RandomEffectDatasetInProjectedSpace
                 .buildWithProjectorType(rawRandomEffectDataset, projectorType)
                 .setName(s"Projected Random Effect Dataset: $coordinateId")
-                .persistRDD(StorageLevel.DISK_ONLY)
+                .persistRDD(StorageLevel.DISK_ONLY_2)
                 .materialize()
 
               // Only un-persist the active data and passive data, because randomEffectDataset and

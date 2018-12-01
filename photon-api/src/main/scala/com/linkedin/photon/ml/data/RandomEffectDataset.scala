@@ -253,7 +253,7 @@ object RandomEffectDataset {
       existingModelKeysRddOpt)
     val activeData = featureSelectionOnActiveData(rawActiveData, randomEffectDataConfiguration)
       .setName("Active data")
-      .persist(StorageLevel.DISK_ONLY)
+//      .persist(StorageLevel.DISK_ONLY)
 
     val globalIdToIndividualIds = activeData
       .flatMap { case (individualId, localDataset) =>
@@ -449,7 +449,7 @@ object RandomEffectDataset {
 
     val passiveData = keyedRandomEffectDataset.subtractByKey(activeDataUniqueIds, gameDataPartitioner)
         .setName("tmp passive data")
-        .persist(StorageLevel.DISK_ONLY)
+//        .persist(StorageLevel.DISK_ONLY)
 
     val passiveDataRandomEffectIdCountsMap = passiveData
       .map { case (_, (randomEffectId, _)) =>
@@ -469,10 +469,10 @@ object RandomEffectDataset {
         passiveDataRandomEffectIdsBroadcast.value.contains(id)
       }
       .setName("passive data")
-      .persist(StorageLevel.DISK_ONLY)
+//      .persist(StorageLevel.DISK_ONLY)
 
-    filteredPassiveData.count()
-    passiveData.unpersist()
+//    filteredPassiveData.count()
+//    passiveData.unpersist()
 
     (filteredPassiveData, passiveDataRandomEffectIdsBroadcast)
   }
