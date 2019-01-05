@@ -44,8 +44,9 @@ protected[ml] class IndexMapProjectorRDD private (indexMapProjectorRDD: RDD[(Str
   override def projectRandomEffectDataset(randomEffectDataset: RandomEffectDataset): RandomEffectDataset = {
 
     val activeData = randomEffectDataset.activeData
-    val passiveDataOption = randomEffectDataset.passiveDataOption
-    val passiveDataRandomEffectIdsOption = randomEffectDataset.passiveDataRandomEffectIdsOption
+    val passiveData = randomEffectDataset.passiveData
+    val passiveDataRandomEffectIds = randomEffectDataset.passiveDataRandomEffectIds
+
     val projectedActiveData =
       activeData
         // Make sure the activeData retains its partitioner, especially when the partitioner of featureMaps is
@@ -53,28 +54,21 @@ protected[ml] class IndexMapProjectorRDD private (indexMapProjectorRDD: RDD[(Str
         .join(indexMapProjectorRDD, activeData.partitioner.get)
         .mapValues { case (localDataset, projector) => localDataset.projectFeatures(projector) }
 
-    val projectedPassiveData =
-      if (passiveDataOption.isDefined) {
-        val passiveDataRandomEffectIds = passiveDataRandomEffectIdsOption.get
-        val projectorsForPassiveData = indexMapProjectorRDD.filter { case (randomEffectId, _) =>
-          passiveDataRandomEffectIds.value.contains(randomEffectId)
-        }.collectAsMap()
-
-        val projectorsForPassiveDataBroadcast = passiveDataOption.get.sparkContext.broadcast(projectorsForPassiveData)
-        val result = passiveDataOption.map {
-          _.mapValues { case (shardId, LabeledPoint(response, features, offset, weight)) =>
-            val projector = projectorsForPassiveDataBroadcast.value(shardId)
-            val projectedFeatures = projector.projectFeatures(features)
-
-            (shardId, LabeledPoint(response, projectedFeatures, offset, weight))
-          }
-        }
-
-        projectorsForPassiveDataBroadcast.unpersist()
-        result
-      } else {
-        None
+    val projectorsForPassiveData = indexMapProjectorRDD
+      .filter { case (randomEffectId, _) =>
+        passiveDataRandomEffectIds.value.contains(randomEffectId)
       }
+      .collectAsMap()
+    val projectorsForPassiveDataBroadcast = randomEffectDataset.sparkContext.broadcast(projectorsForPassiveData)
+    val projectedPassiveData = passiveData.mapValues { case (shardId, LabeledPoint(response, features, offset, weight)) =>
+      val projector = projectorsForPassiveDataBroadcast.value(shardId)
+      val projectedFeatures = projector.projectFeatures(features)
+
+      (shardId, LabeledPoint(response, projectedFeatures, offset, weight))
+    }
+
+    // TODO: Need a better design that properly unpersists the broadcast variables and persists the computed RDD
+//    projectorsForPassiveDataBroadcast.unpersist()
 
     randomEffectDataset.update(projectedActiveData, projectedPassiveData)
   }
@@ -234,24 +228,17 @@ object IndexMapProjectorRDD {
       }
 
     // Collect active indices for the passive dataset
-    val passiveIndicesOption = randomEffectDataset
-      .passiveDataOption
-      .map { passiveData =>
-        passiveData
-          .map {
-            case (_, (reId, labeledPoint)) => (reId, labeledPoint.features)
-          }
-          .mapValues(VectorUtils.getActiveIndices)
+    val passiveIndices = randomEffectDataset
+      .passiveData
+      .map { case (_, (reId, labeledPoint)) =>
+        (reId, labeledPoint.features)
       }
+      .mapValues(VectorUtils.getActiveIndices)
 
     // Union them, and fold the results into (reId, indices) tuples
-    val indices = passiveIndicesOption
-      .map { passiveIndices =>
-        activeIndices
-          .union(passiveIndices)
-          .foldByKey(Set.empty[Int])(_ ++ _)
-      }
-      .getOrElse(activeIndices)
+    val indices = activeIndices
+      .union(passiveIndices)
+      .foldByKey(Set.empty[Int])(_ ++ _)
 
     val indexMapProjectors = indices.mapValues { indexSet =>
       new IndexMapProjector(indexSet.zipWithIndex.toMap, originalSpaceDimension, indexSet.size)
