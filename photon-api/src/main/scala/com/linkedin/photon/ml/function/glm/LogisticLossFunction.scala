@@ -43,6 +43,7 @@ import com.linkedin.photon.ml.util.MathUtils
  */
 @SerialVersionUID(1L)
 object LogisticLossFunction extends PointwiseLossFunction {
+
   /**
    * The sigmoid function:
    *
@@ -68,12 +69,11 @@ object LogisticLossFunction extends PointwiseLossFunction {
    * @return The value and the 1st derivative
    */
   override def lossAndDzLoss(margin: Double, label: Double): (Double, Double) = {
-    if (label > MathConst.POSITIVE_RESPONSE_THRESHOLD) {
-      // The following is equivalent to log(1 + exp(-margin)) but more numerically stable.
-      (MathUtils.log1pExp(-margin), -sigmoid(-margin))
-    } else {
-      (MathUtils.log1pExp(margin), sigmoid(margin))
-    }
+
+    val loss = (label * MathUtils.log1pExp(-margin)) + ((1D - label) * MathUtils.log1pExp(margin))
+    val DzLoss = ((1D - label) * sigmoid(margin)) - (label * sigmoid(-margin))
+
+    (loss, DzLoss)
   }
 
   /**
