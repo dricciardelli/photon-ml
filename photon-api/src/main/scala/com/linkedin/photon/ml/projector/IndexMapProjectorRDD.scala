@@ -230,7 +230,13 @@ object IndexMapProjectorRDD {
     val activeIndices = randomEffectDataset
       .activeData
       .mapValues { ds =>
-        ds.dataPoints.map(_._2.features).flatMap(VectorUtils.getActiveIndices).toSet
+        ds
+          .dataPoints
+          .map { case (_, labeledPoint) =>
+            VectorUtils.getActiveIndices(labeledPoint.features)
+          }
+          .foldLeft(Set[Int]())(_.union(_))
+//        ds.dataPoints.map(_._2.features).flatMap(VectorUtils.getActiveIndices).toSet
       }
 
     // Collect active indices for the passive dataset
@@ -239,17 +245,21 @@ object IndexMapProjectorRDD {
       .map { passiveData =>
         passiveData
           .map {
-            case (_, (reId, labeledPoint)) => (reId, labeledPoint.features)
+            case (_, (reId, labeledPoint)) => (reId, VectorUtils.getActiveIndices(labeledPoint.features))
           }
-          .mapValues(VectorUtils.getActiveIndices)
+          .partitionBy(randomEffectDataset.randomEffectIdPartitioner)
       }
 
     // Union them, and fold the results into (reId, indices) tuples
     val indices = passiveIndicesOption
       .map { passiveIndices =>
-        activeIndices
-          .union(passiveIndices)
-          .foldByKey(Set.empty[Int])(_ ++ _)
+        if (!passiveIndices.isEmpty()) {
+          activeIndices
+            .union(passiveIndices)
+            .foldByKey(Set.empty[Int])(_ ++ _)
+        } else {
+          activeIndices
+        }
       }
       .getOrElse(activeIndices)
 

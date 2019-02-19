@@ -261,12 +261,28 @@ object VectorUtils {
    * @return the set of indices
    */
   def getActiveIndices(vector: Vector[Double]): Set[Int] = vector match {
-    case vector: DenseVector[Double] => vector
+    case vector: DenseVector[Double] =>
+//      vector
+//        .valuesIterator
+//        .zipWithIndex
+//        .filter(x => !MathUtils.isAlmostZero(x._1))
+//        .map(_._2)
+//        .toSet
+
+      val set: mutable.Set[Int] = mutable.Set.empty[Int]
+      var i: Int = 0
+
+      vector
         .valuesIterator
-        .zipWithIndex
-        .filter(x => !MathUtils.isAlmostZero(x._1))
-        .map(_._2)
-        .toSet
+        .foreach { value =>
+          if (!MathUtils.isAlmostZero(value)) {
+            set += i
+          }
+
+          i += 1
+        }
+
+      set.toSet
 
     case _ => vector.activeKeysIterator.toSet
   }
